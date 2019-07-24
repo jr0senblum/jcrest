@@ -1,0 +1,27 @@
+{application, 'jcrest',
+ [{description, "A restful interface for jc"},
+  {vsn, "0.0.1"},
+  {registered, [
+               ]},
+  {mod, {'jcrest_app', []}},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  stdlib, 
+                  syntax_tools,
+                  compiler,
+                  cowboy,
+                  lager,
+                  jc
+                 ]},
+  {included_applications, []},
+  {env,[]},
+  {modules, [
+             cb_collections_h,
+             cb_map_h,
+             jcrest_app
+            ]},
+  {maintainers, ["Jim Rosenblum"]},
+  {licenses, ["The MIT License"]},
+  {links,[{"GitHub","https://github.com/jr0senblum/jcrest"}]}
+ ]}.
