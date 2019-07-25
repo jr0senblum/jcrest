@@ -284,7 +284,7 @@ maps_to_json(Req, MapList) ->
         lists:foldl(fun(MapName, Acc) ->
                             [[<<"{\"map\":\"">>,MapName,<<"\",">>,
                               <<"\"links\": [{\"rel\":\"self\",">>,
-                              <<"\"href\":\"">>, Url, <<"">>, MapName, 
+                              <<"\"href\":\"">>, Url, <<"/">>, MapName,
                               <<"\"}]}">>]|Acc]
                     end,
                     [],

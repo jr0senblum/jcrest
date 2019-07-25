@@ -21,16 +21,15 @@
 -export([allowed_methods/2,
          content_types_accepted/2,
          content_types_provided/2,
-         delete_completed/2,
          delete_resource/2,
-         resource_exists/2]).
+         resource_exists/2
+        ]).
 
-% Callbacks that handles constructing JSON responses to GET and does the actual
-% put.
+% Callbacks that construct JSON responses to GET and does the actual put.
 -export([kv_to_json/2, put_kv/2]).
 
-% Handler state
--record(cb_coll_state, {}).
+% Handler state. When resource_exists = true, cache result in value.
+-record(cb_map_state, {value :: string()}).
 
 
 
@@ -44,10 +43,10 @@
 %%
 -spec init(_,nonempty_maybe_improper_list())-> {'cowboy_rest', Req, State}
                             when Req::cowboy_req:req(),
-                                 State::#cb_coll_state{}.
+                                 State::#cb_map_state{}.
 
 init(Req, _Opts) ->
-    State = #cb_coll_state{},
+    State = #cb_map_state{},
     {cowboy_rest, Req, State}.
 
 
@@ -61,7 +60,7 @@ init(Req, _Opts) ->
 %% 
 -spec allowed_methods (Req, State) -> {Method, Req, State}
                                       when Req::cowboy_req:req(),
-                                           State::#cb_coll_state{},
+                                           State::#cb_map_state{},
                                            Method::nonempty_list().
 
 allowed_methods(Req, State) ->
@@ -74,7 +73,7 @@ allowed_methods(Req, State) ->
 %%
 -spec content_types_provided(Req, State) -> {Types, Req, State}
                                             when Req::cowboy_req:req(),
-                                                 State::#cb_coll_state{},
+                                                 State::#cb_map_state{},
                                                  Types::cowboy:types().
 
 content_types_provided(Req, State) ->
@@ -89,7 +88,7 @@ content_types_provided(Req, State) ->
 %%
 -spec content_types_accepted(Req, State) -> {Types, Req, State}
                                             when Req::cowboy_req:req(),
-                                                 State::#cb_coll_state{},
+                                                 State::#cb_map_state{},
                                                  Types::cowboy:types().
 
 content_types_accepted(Req, State) ->
@@ -105,41 +104,35 @@ content_types_accepted(Req, State) ->
 -spec delete_resource(Req, State) -> {Result, Req, State}
                                      when Result::boolean(),
                                           Req::cowboy_req:req(),
-                                          State::#cb_coll_state{}.
+                                          State::#cb_map_state{}.
 
 delete_resource(Req, State) ->
     MapName = cowboy_req:binding(map, Req),
     KeyName = cowboy_req:binding(key, Req),
     lager:debug("~p: DELETing ~,~.", [MapName, KeyName]),
-    ok = jc:evict(MapName, KeyName),
-    {true, Req, State}.
-
+    try jc:evict(MapName, KeyName) of
+        ok -> {true, Req, State};
+        false -> {false, Req, State}
+    catch
+        _:_ -> {false, Req, State}
+    end.
+            
 
 %% -----------------------------------------------------------------------------
-%% Returns true when the resources is completely DELETEd.
+%% Return true if the resource exists, cache the value if the KV does exist.
 %%
--spec delete_completed(Req, State) -> {Result, Req, State}
-                                     when Result::boolean(),
-                                          Req::cowboy_req:req(),
-                                          State::#cb_coll_state{}.
-
-delete_completed(Req, State) ->
-    MapName = cowboy_req:binding(map, Req),
-    KeyName = cowboy_req:binding(key, Req),
-    {miss = jc:get(MapName, KeyName), Req, State}.
-
-
-%% -----------------------------------------------------------------------------
-%% Returns true when the resource exists, else false.
 -spec resource_exists (Req, State) -> {boolean(), Req, State}
                                       when Req::cowboy_req:req(),
-                                           State::#cb_coll_state{}.
+                                           State::#cb_map_state{}.
 
 resource_exists(Req, State) ->
-    % TODO optimize this
     Map = cowboy_req:binding(map, Req),
     Key = cowboy_req:binding(key, Req),
-    {miss /= jc:get(Map, Key), Req, State}.
+    Result = case jc:get(Map, Key) of
+                miss -> miss;
+                {ok, Value} -> Value
+            end,
+    {miss /= Result, Req, State#cb_map_state{value=Result}}.
 
 
 
@@ -155,14 +148,13 @@ resource_exists(Req, State) ->
 -spec kv_to_json(Req, State) ->{Value, Req, State}
                                       when Value::nonempty_list(iodata()),
                                            Req::cowboy_req:req(),
-                                           State::#cb_coll_state{}.
+                                           State::#cb_map_state{}.
 
-kv_to_json(#{method := <<"GET">>} = Req, State) ->
+kv_to_json(Req, #cb_map_state{value = Value} = State) -> 
     Map = cowboy_req:binding(map, Req),
     Key = cowboy_req:binding(key, Req),
     lager:debug("~p: GET ~p:~p.",[?MODULE, Map, Key]),
 
-    {ok, Value} = jc:get(Map, Key),
     {kv_to_json(Req, Map, Key, Value), Req, State};
 
 kv_to_json(#{method := <<"HEAD">>} = Req, State) ->
@@ -175,7 +167,7 @@ kv_to_json(#{method := <<"HEAD">>} = Req, State) ->
 %%
 -spec put_kv(Req, State) ->{true, Req, State}
                                       when Req::cowboy_req:req(),
-                                           State::#cb_coll_state{}.
+                                           State::#cb_map_state{}.
 put_kv(Req, State) ->
     {ok, Body, Req1} = cowboy_req:read_urlencoded_body(Req),
     case value_to_int(<<"sequence">>, false, Body) of
@@ -242,7 +234,7 @@ kv_to_json(Req, Map, Key, Value) ->
      <<"\"key\": \"">>, Key, <<"\",">>,
      <<"\"value\": \"">>, Value, <<"\",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"map\",\"href\":\"">>,SHP,<<"/maps">>,Map,<<"\"}]}">>].
+     <<"{\"rel\":\"map\",\"href\":\"">>,SHP,<<"/maps/">>,Map,<<"\"}]}">>].
 
 
 % ------------------------------------------------------------------------------
