@@ -244,7 +244,7 @@ kvs_to_json(Req, MapName, KVList) ->
                             [[<<"{\"key\":\"">>,Key,<<"\",">>,
                               <<"\"value\":">>,Value,<<",">>,
                               <<"\"links\": [{\"rel\":\"self\",">>,
-                              <<"\"href\":\"">>, SHP, <<"/maps/">>,MapName, <<"/">>, Key,
+                              <<"\"href\":\"">>, SHP, <<"/maps">>,MapName, <<"/">>, Key,
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
