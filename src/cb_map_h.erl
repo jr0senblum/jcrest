@@ -257,3 +257,68 @@ value_to_int(Key, Default, Body) ->
 
                     
                     
+%%
+%% Tests
+%%
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+
+rest_test() ->
+
+    net_kernel:start(['jc@127.0.0.1', longnames]),
+    application:set_env(jc, cache_nodes, ['jc@127.0.0.1']),
+    application:ensure_all_started(jc),
+    application:set_env(jcrest, server_ip, "127.0.0.1"),
+    application:set_env(jcrest, server_port, 8080),
+    application:set_env(jcrest, server_root, "/"),
+    lager:set_loglevel(lager_console_backend, error),
+    application:ensure_all_started(jcrest),
+
+  % Allowable methods on Maps collections are Delete, Get, Head, and Options.
+    {ok,{{"HTTP/1.1",200,"OK"},
+         [_date , _server, 
+          {"allow","DELETE, GET, HEAD, OPTIONS"},
+          {"content-length","0"}], 
+         []}} = httpc:request(options, 
+                              {"http://127.0.0.1:8080/maps", []},
+                              [],
+                              []),
+    
+    jc:put(<<"map1">>,<<"key1">>,<<"value">>),
+    jc:put(<<"map1">>,<<"key2">>,<<"value2">>),
+    jc:put(<<"map2">>,<<"key1">>,<<"value">>),
+    jc:put(<<"map2">>,<<"key2">>,<<"value2">>),
+    
+    MapsURL = <<"http://127.0.0.1:8080/maps">>
+
+    % GET on maps should return JSON representation of the maps collection
+    {ok, {{_, 200, "OK"}, _, V}} = 
+        httpc:request(get, {"http://127.0.0.1:8080/maps", []}, [], []),
+    
+    %convert result to map
+    VMap = jsone:decode(list_to_binary(V)),
+
+    % self is the url we got
+    MaspURL = jwalk:get({"links",{select, {"rel", "self"}}, "href", 1}, VMap),
+
+    % contains the two maps, map1 and map2
+    MapNames = jwalk:get({"maps","map"}, VMap),
+    lists:member(<<"map2">>, MapNames),
+    lists:member(<<"map1">>, MapNames),
+    2 = length(MapNames),
+
+    % map1 portion of the jason contains map1 json, and that contains the URL
+    % for the map1 collection
+    Map1 = jwalk:get({"maps",{select,{"map", "map1"}}}, VMap),
+    <<"http://127.0.0.1:8080/maps/map1">> = 
+        jwalk:get({"links",{select, {"rel", "self"}}, "href", 1}, Map1),
+
+    % map2 portion of the jason contains map2 json, and that contains the URL
+    % for the map1 collection.
+    Map2 = jwalk:get({"maps",{select,{"map", "map2"}}}, VMap),
+    <<"http://127.0.0.1:8080/maps/map2">> = 
+        jwalk:get({"links",{select, {"rel", "self"}}, "href", 1}, Map2).
+
+
+-endif.
