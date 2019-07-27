@@ -251,26 +251,27 @@ kvs_to_json(Req, MapName, KVList) ->
                     KVList),
 
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"map\":\"">>, MapName, <<"\", \"results\": [">>, Separated, <<"],">>,
+    [<<"{\"map_name\":\"">>, MapName, <<"\", \"results\": [">>, Separated, <<"],">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"map\",\"href\":\"">>,SHP,<<"/maps/">>,MapName,<<"\"}]}">>].
+     <<"{\"rel\":\"map_name\",\"href\":\"">>,SHP,<<"/maps/">>,MapName,<<"\"}]}">>].
 
 map_to_json(Req, MapName, KeyList) ->
     {SHP, Path} = get_URI(Req),
     Url = [SHP, Path],
     ListOfMaps = 
         lists:foldl(fun(Key, Acc) ->
+                            {ok, Value} = jc:get(MapName, Key),
                             [[<<"{\"key\":\"">>,Key,<<"\",">>,
-                              <<"\"links\": [{\"rel\":\"self\",">>,
+                              <<"\"value\":\"">>,Value,<<"\",">>,
+                              <<"\"links\": [{\"rel\":\"item\",">>,
                               <<"\"href\":\"">>, Url, <<"/">>,Key,
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
                     KeyList),
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"map\":\"">>, MapName, <<"\", \"keys\": [">>, Separated, <<"],">>,
-     <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"maps\",\"href\":\"">>,SHP,<<"/maps\"}]}">>].
+    [<<"{\"map_name\":\"">>, MapName, <<"\", \"keys\": [">>, Separated, <<"],">>,
+     <<"\"links\": {\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps\"}}">>].
 
 
 % ------------------------------------------------------------------------------
@@ -282,16 +283,15 @@ maps_to_json(Req, MapList) ->
 
     ListOfMaps = 
         lists:foldl(fun(MapName, Acc) ->
-                            [[<<"{\"map\":\"">>,MapName,<<"\",">>,
-                              <<"\"links\": [{\"rel\":\"self\",">>,
+                            [[<<"{\"map_name\":\"">>,MapName,<<"\",">>,
+                              <<"\"links\": [{\"rel\":\"collection\",">>,
                               <<"\"href\":\"">>, Url, <<"/">>, MapName,
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
                     MapList),
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"maps\":">>, <<"[">>, Separated, <<"],">>,
-     <<" \"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"}]}">>].
+    [<<"{\"maps\":">>, <<"[">>, Separated, <<"]}">>].
     
 
 
