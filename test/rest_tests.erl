@@ -2,23 +2,21 @@
 %% Tests
 %%
 
--module(hateoas_tests).
+-module(rest_tests).
 -include_lib("eunit/include/eunit.hrl").
-
--export([all_my_test_/0,
-         options_test/0,
-         navigate_test/0]).
-
 
 
 
 all_my_test_() ->
-    [{"Options for Map and Maps",  fun options_test/0},
-     {"Get and navigation for Map and Maps", fun navigate_test/0}].
+    [{"Options for Maps",  fun maps_options_test/0},
+     {"Options for Map",  fun map_options_test/0},
+     {"Options for Cache Item",  fun item_options_test/0},
+     {"Head test - no complaints",  fun head_test/0},
+     {"Get and navigation for Map and Maps", fun hateoas_test/0}].
 
 
 % Allowable methods on Maps collections are Delete, Get, Head, and Options.
-options_test() ->
+maps_options_test() ->
     net_kernel:start(['jc@127.0.0.1', longnames]),
     application:set_env(jc, cache_nodes, ['jc@127.0.0.1']),
     application:ensure_all_started(jc),
@@ -28,19 +26,90 @@ options_test() ->
     lager:set_loglevel(lager_console_backend, error),
     application:ensure_all_started(jcrest),
 
-    {ok,{{"HTTP/1.1",200,"OK"},
-         [_date , _server, 
-          {"allow","DELETE, GET, HEAD, OPTIONS"},
-          {"content-length","0"}], 
-         []}} = httpc:request(options, 
-                              {"http://127.0.0.1:8080/maps", []},
-                              [],
-                              []),
-    true.
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                      [_date , _server, 
+                       {"allow","DELETE, GET, HEAD, OPTIONS"},
+                       {"content-length","0"}], 
+                      []}},
+                 httpc:request(options, 
+                               {"http://127.0.0.1:8080/maps", []},
+                               [],
+                               [])).
+
+% Allowable methods on Map are Delete, Get, Head, and Options.
+map_options_test() ->
+    jc:put(<<"aMap">>,1,1),
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                      [_date , _server, 
+                       {"allow","DELETE, GET, HEAD, OPTIONS"},
+                       {"content-length","0"}], 
+                      []}},
+                 httpc:request(options, 
+                               {"http://127.0.0.1:8080/maps/aMap", []},
+                               [],
+                               [])).
+
+% Allowable methods on cahce entry (M,K,V) are Delete, Get, Head, Options, Put.
+item_options_test() ->
+    jc:put(<<"aMap">>,<<"1">>,<<"1">>),
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                      [_date , _server, 
+                       {"allow","DELETE, GET, HEAD, OPTIONS, PUT"},
+                       {"content-length","0"}], 
+                      []}},
+                 httpc:request(options, 
+                               {"http://127.0.0.1:8080/maps/aMap/1", []},
+                               [],
+                               [])).
+
+head_test() ->
+    jc:put(<<"bed">>,<<"1">>,<<"2">>),    
+
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                       [_date, _server,
+                        {"content-length","0"},
+                        {"content-type","application/json"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/maps", []}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                       [_date, _server,
+                        {"content-length","0"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/mapss", []}, [], [])),
+    
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                       [_date, _server,
+                        {"content-length","0"},
+                        {"content-type","application/json"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed", []}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                       [_date, _server,
+                        {"content-length","0"},
+                        {"content-type","application/json"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/not", []}, [], [])),
+    
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                       [_date, _server,
+                        {"content-length",_},
+                        {"content-type","application/json"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed/1", []}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                       [_date, _server,
+                        {"content-length","0"},
+                        {"content-type","application/json"}],
+                       []}},
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed/11", []}, [], [])).
 
    
 % Hypermedia as the Engine of Application State: HATEOAS 
-navigate_test()->
+hateoas_test()->
+    jc:flush(),
     jc:put(<<"map1">>,<<"key1">>,<<"value1">>),
     jc:put(<<"map1">>,<<"key2">>,<<"value2">>),
     jc:put(<<"map2">>,<<"key1">>,<<"value1">>),
