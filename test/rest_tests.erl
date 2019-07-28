@@ -8,10 +8,12 @@
 
 
 all_my_test_() ->
-    [{"Options for Maps",  fun maps_options_test/0},
-     {"Options for Map",  fun map_options_test/0},
-     {"Options for Cache Item",  fun item_options_test/0},
-     {"Head test - no complaints",  fun head_test/0},
+    [{"Options for Maps", fun maps_options_test/0},
+     {"Options for Map", fun map_options_test/0},
+     {"Options for Cache Item", fun item_options_test/0},
+     {"Head test - no complaints", fun head_test/0},
+     {"Simple put test", fun simple_put_test/0},
+     {"Delete test", fun delete_test/0},
      {"Get and navigation for Map and Maps", fun hateoas_test/0}].
 
 
@@ -38,6 +40,7 @@ maps_options_test() ->
 
 % Allowable methods on Map are Delete, Get, Head, and Options.
 map_options_test() ->
+    jc:flush(),
     jc:put(<<"aMap">>,1,1),
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                       [_date , _server, 
@@ -51,6 +54,7 @@ map_options_test() ->
 
 % Allowable methods on cahce entry (M,K,V) are Delete, Get, Head, Options, Put.
 item_options_test() ->
+    jc:flush(),
     jc:put(<<"aMap">>,<<"1">>,<<"1">>),
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                       [_date , _server, 
@@ -63,6 +67,7 @@ item_options_test() ->
                                [])).
 
 head_test() ->
+    jc:flush(),
     jc:put(<<"bed">>,<<"1">>,<<"2">>),    
 
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
@@ -106,7 +111,57 @@ head_test() ->
                        []}},
                  httpc:request(head, {"http://127.0.0.1:8080/maps/bed/11", []}, [], [])).
 
-   
+
+% Put should create, update to existing should return no content.   
+simple_put_test() ->
+    jc:flush(),
+    ?assertMatch({ok,{{"HTTP/1.1",201,"Created"},
+                       [_date,
+                        {"location","http://127.0.0.1:8080/maps/aMap/key1"},
+                        {"server","Cowboy"},
+                        {"content-length","0"},
+                        {"content-type","application/json"}],
+                      []}},
+                 httpc:request(put, {"http://127.0.0.1:8080/maps/aMap/key1", 
+                                     [],
+                                     "application/x-www-form-urlencoded",
+                                     "value=key1Value"}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
+                  [_date,
+                   {"location","http://127.0.0.1:8080/maps/aMap/key1"},
+                   {"server","Cowboy"},
+                   {"content-type","application/json"}],
+                  []}},
+                 httpc:request(put, {"http://127.0.0.1:8080/maps/aMap/key1", 
+                                     [],
+                                     "application/x-www-form-urlencoded",
+                                     "value=key1Value"}, [], [])).
+
+% Delete test
+delete_test() ->
+    jc:flush(),
+    jc:put(<<"bed">>,<<"1">>,<<"1">>),
+    ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
+                      [_date,
+                       {"server","Cowboy"},
+                       {"content-type","application/json"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps/bed/1",
+                                []}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                      [_date,
+                       {"server","Cowboy"},
+                       {"content-length","0"},
+                       {"content-type","application/json"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps/bed/1",
+                                []}, [], [])).
+
+
 % Hypermedia as the Engine of Application State: HATEOAS 
 hateoas_test()->
     jc:flush(),
@@ -195,6 +250,7 @@ hateoas_test()->
 
     <<"http://127.0.0.1:8080/maps/map2">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem2),
     <<"http://127.0.0.1:8080/maps/map2/key2">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem2).
+    
 
 
 
