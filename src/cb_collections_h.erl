@@ -28,8 +28,8 @@
 -export([collection_to_json/2]).
 
 % Handler state
--record(cb_coll_state, {op :: map | maps,
-                        body:: string()}).
+-record(cb_coll_state, {op :: map | maps | search,
+                        body :: string() | [{jc:key(), jc:value()}]}).
 
 
 
@@ -48,7 +48,7 @@
 
 init(Req, Opts) ->
     [Op | _] = Opts,
-    State = #cb_coll_state{op=Op},
+    State = #cb_coll_state{op=Op, body = ""},
     {cowboy_rest, Req, State}.
 
 

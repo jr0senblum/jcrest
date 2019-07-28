@@ -46,7 +46,7 @@
                                  State::#cb_map_state{}.
 
 init(Req, _Opts) ->
-    State = #cb_map_state{},
+    State = #cb_map_state{value = ""},
     {cowboy_rest, Req, State}.
 
 
@@ -111,8 +111,7 @@ delete_resource(Req, State) ->
     KeyName = cowboy_req:binding(key, Req),
     lager:debug("~p: DELETing ~,~.", [MapName, KeyName]),
     try jc:evict(MapName, KeyName) of
-        ok -> {true, Req, State};
-        false -> {false, Req, State}
+        ok -> {true, Req, State}
     catch
         _:_ -> {false, Req, State}
     end.
@@ -155,10 +154,7 @@ kv_to_json(Req, #cb_map_state{value = Value} = State) ->
     Key = cowboy_req:binding(key, Req),
     lager:debug("~p: GET ~p:~p.",[?MODULE, Map, Key]),
 
-    {kv_to_json(Req, Map, Key, Value), Req, State};
-
-kv_to_json(#{method := <<"HEAD">>} = Req, State) ->
-            {<<>>, Req, State}.
+    {kv_to_json(Req, Map, Key, Value), Req, State}.
 
 
 %% -----------------------------------------------------------------------------
@@ -183,13 +179,16 @@ put_kv_jc_s(Req, Body, State, Seq) ->
     {SHP, Path} = get_URI(Req),
 
     lager:debug("~p: jc_s:put(~p, ~p, ~p, ~p, ~p).",[?MODULE, Map, Key, Value, TTL, Seq]),
-    case jc_s:put(Map, Key, Value, TTL, Seq) of
+    try jc_s:put(Map, Key, Value, TTL, Seq) of
         {ok, Key} ->
             Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
             {true, Req1, State};
         {error, out_of_seq} ->
             Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
             {false, Req1, State}
+    catch
+        _:_ ->
+            {false, Req, State}
     end.
 
 put_kv_jc(Req, Body, State) ->
@@ -200,12 +199,18 @@ put_kv_jc(Req, Body, State) ->
 
     lager:debug("~p: jc:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, Value, TTL]),
 
-    {ok, Key} = jc:put(Map, Key, Value, TTL),
 
-    {SHP, Path} = get_URI(Req),
-    Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
-    {true, Req1, State}.
-
+    try jc:put(Map, Key, Value, TTL) of
+        {ok, Key} ->
+            {SHP, Path} = get_URI(Req),
+            Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
+            {true, Req1, State};
+        _ ->
+            {false, Req, State}
+    catch
+        _:_ ->
+            {false, Req, State}
+    end.
 
 
 %%% ============================================================================
