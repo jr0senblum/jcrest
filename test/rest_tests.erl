@@ -8,7 +8,8 @@
 
 
 all_my_test_() ->
-    [{"Options for Maps", fun maps_options_test/0},
+    [{"Empty cache should not have any maps", fun empty_test/0},
+     {"Options for Maps", fun maps_options_test/0},
      {"Options for Map", fun map_options_test/0},
      {"Options for Cache Item", fun item_options_test/0},
      {"Head test - no complaints", fun head_test/0},
@@ -17,8 +18,9 @@ all_my_test_() ->
      {"Get and navigation for Map and Maps", fun hateoas_test/0}].
 
 
-% Allowable methods on Maps collections are Delete, Get, Head, and Options.
-maps_options_test() ->
+% Empty cache, maps should not exist.
+% Use first test to start up the server. Not great, but.
+empty_test() ->
     net_kernel:start(['jc@127.0.0.1', longnames]),
     application:set_env(jc, cache_nodes, ['jc@127.0.0.1']),
     application:ensure_all_started(jc),
@@ -28,6 +30,28 @@ maps_options_test() ->
     lager:set_loglevel(lager_console_backend, error),
     application:ensure_all_started(jcrest),
 
+    jc:flush(),
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                        [_date,
+                         {"server","Cowboy"},
+                         {"content-length","0"}],
+                        []}},    
+                   httpc:request(get, {"http://127.0.0.1:8080/maps", []}, [], [])),
+    
+    jc:put(<<"1">>,<<"1">>,<<"1">>),
+
+    ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
+                      [_date,
+                       {"server","Cowboy"},
+                       _length,
+                       {"content-type","application/json"}],
+                      _body}},
+                 httpc:request(get, {"http://127.0.0.1:8080/maps", []}, [], [])),
+    jc:flush().
+
+
+% Allowable methods on Maps collections are Delete, Get, Head, and Options.
+maps_options_test() ->
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                       [_date , _server, 
                        {"allow","DELETE, GET, HEAD, OPTIONS"},
@@ -72,8 +96,7 @@ head_test() ->
 
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                        [_date, _server,
-                        {"content-length","0"},
-                        {"content-type","application/json"}],
+                        {"content-length","0"}],
                        []}},
                  httpc:request(head, {"http://127.0.0.1:8080/maps", []}, [], [])),
 
@@ -85,15 +108,13 @@ head_test() ->
     
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                        [_date, _server,
-                        {"content-length","0"},
-                        {"content-type","application/json"}],
+                        {"content-length","0"}],
                        []}},
                  httpc:request(head, {"http://127.0.0.1:8080/maps/bed", []}, [], [])),
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
                        [_date, _server,
-                        {"content-length","0"},
-                        {"content-type","application/json"}],
+                        {"content-length","0"}],
                        []}},
                  httpc:request(head, {"http://127.0.0.1:8080/maps/not", []}, [], [])),
     
@@ -106,8 +127,7 @@ head_test() ->
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
                        [_date, _server,
-                        {"content-length","0"},
-                        {"content-type","application/json"}],
+                        {"content-length","0"}],
                        []}},
                  httpc:request(head, {"http://127.0.0.1:8080/maps/bed/11", []}, [], [])).
 
@@ -119,8 +139,7 @@ simple_put_test() ->
                        [_date,
                         {"location","http://127.0.0.1:8080/maps/aMap/key1"},
                         {"server","Cowboy"},
-                        {"content-length","0"},
-                        {"content-type","application/json"}],
+                        {"content-length","0"}],
                       []}},
                  httpc:request(put, {"http://127.0.0.1:8080/maps/aMap/key1", 
                                      [],
@@ -130,8 +149,7 @@ simple_put_test() ->
     ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
                   [_date,
                    {"location","http://127.0.0.1:8080/maps/aMap/key1"},
-                   {"server","Cowboy"},
-                   {"content-type","application/json"}],
+                   {"server","Cowboy"}],
                   []}},
                  httpc:request(put, {"http://127.0.0.1:8080/maps/aMap/key1", 
                                      [],
@@ -144,8 +162,7 @@ delete_test() ->
     jc:put(<<"bed">>,<<"1">>,<<"1">>),
     ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
                       [_date,
-                       {"server","Cowboy"},
-                       {"content-type","application/json"}],
+                       {"server","Cowboy"}],
                       []}},
                  httpc:request(delete, 
                                {"http://127.0.0.1:8080/maps/bed/1",
@@ -154,8 +171,7 @@ delete_test() ->
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
                       [_date,
                        {"server","Cowboy"},
-                       {"content-length","0"},
-                       {"content-type","application/json"}],
+                       {"content-length","0"}],
                       []}},
                  httpc:request(delete, 
                                {"http://127.0.0.1:8080/maps/bed/1",
