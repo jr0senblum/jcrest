@@ -128,15 +128,15 @@ delete_completed(Req, #cb_coll_state{op = map} = State) ->
                                            State::#cb_coll_state{}.
 
 resource_exists(Req, #cb_coll_state{op = maps} = State) ->
-    % TODO optimize this
-    {maps, Maps} = jc:maps(),
-    {length(Maps) > 0, Req, State};
+    % If there are any cache entries, than Maps exist.
+    {size, Sizes} = jc:cache_size(),
+    {key_to_value, {records, N}, _} = proplists:lookup(key_to_value, Sizes),
+    {N > 0, Req, State};
 
 resource_exists(Req, #cb_coll_state{op = map} = State) ->
-    % TODO optimize this
     Map = cowboy_req:binding(map, Req),
-    {records, Records} = jc:map_size(Map),
-    {Records > 0, Req, State};
+    
+    {jc:map_exists(Map), Req, State};
 
 resource_exists(Req, #cb_coll_state{op = search} = State) ->
     % If the resource exists, store in the State so we don't have to
