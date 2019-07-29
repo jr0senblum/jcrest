@@ -14,7 +14,7 @@ all_my_test_() ->
      {"Options for Cache Item", fun item_options_test/0},
      {"Head test - no complaints", fun head_test/0},
      {"Simple put test", fun simple_put_test/0},
-     {"Delete test", fun delete_test/0},
+     {"Delete mkv test", fun delete_mkv_test/0},
      {"Get and navigation for Map and Maps", fun hateoas_test/0}].
 
 
@@ -156,8 +156,8 @@ simple_put_test() ->
                                      "application/x-www-form-urlencoded",
                                      "value=key1Value"}, [], [])).
 
-% Delete test
-delete_test() ->
+% Delete Map Key Value test
+delete_mkv_test() ->
     jc:flush(),
     jc:put(<<"bed">>,<<"1">>,<<"1">>),
     ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
@@ -176,6 +176,36 @@ delete_test() ->
                  httpc:request(delete, 
                                {"http://127.0.0.1:8080/maps/bed/1",
                                 []}, [], [])).
+
+% Delete Map test
+delete_map_test() ->
+    jc:flush(),
+    jc:put(<<"bed">>,<<"1">>,<<"1">>),
+    jc:put(<<"other">>,<<"1">>,<<"1">>),
+    ?assertEqual(jc:map_exists(<<"bed">>), true),
+    ?assertEqual(jc:map_exists(<<"other">>), true),
+
+    ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
+                      [_date,
+                       {"server","Cowboy"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps/bed",
+                                []}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                      [_date,
+                       {"server","Cowboy"},
+                       {"content-length","0"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps/bed",
+                                []}, [], [])),
+
+    ?assertEqual(jc:map_exists(<<"other">>), true),
+    ?assertEqual(jc:map_exists(<<"bed">>), false).
+
+
 
 
 % Hypermedia as the Engine of Application State: HATEOAS 

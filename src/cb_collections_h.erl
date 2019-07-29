@@ -86,7 +86,7 @@ content_types_provided(Req, State) ->
 
 
 %% -----------------------------------------------------------------------------
-%% DELETE the resource collection, maps or map, or the key within a map.
+%% DELETE the resource collection, maps or map.
 %%
 -spec delete_resource(Req, State) -> {Result, Req, State}
                                      when Result::boolean(),
@@ -98,8 +98,8 @@ delete_resource(Req, #cb_coll_state{op = maps} = State) ->
     {true, Req, State};
 
 delete_resource(Req, #cb_coll_state{op = map} = State) ->
-     MapName = cowboy_req:binding(map, Req),   
-     ok = jc:evict_map_since(MapName,0),
+    MapName = cowboy_req:binding(map, Req),   
+    ok = jc:clear(MapName),
     {true, Req, State}.
 
 
