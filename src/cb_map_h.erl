@@ -32,6 +32,7 @@
 -record(cb_map_state, {value :: string()}).
 
 
+-define(ENCODE(T), jsone:encode(T, [{float_format, [{decimals, 4}, compact]}])).
 
 %%% ============================================================================
 %%% Module callbacks required for Cowboy handler
@@ -235,11 +236,14 @@ get_URI(Req) ->
 kv_to_json(Req, Map, Key, Value) ->
     {SHP, Path} = get_URI(Req),
     Url = [SHP, Path],
-    [<<"{\"map_name\":\"">>, Map, <<"\",">>,
-     <<"\"key\": \"">>, Key, <<"\",">>,
-     <<"\"value\": \"">>, Value, <<"\",">>,
+    [<<"{\"map_name\":">>, Map, <<",">>,
+     <<"\"key\":">>, fix(jsone:decode(Key)), <<",">>,
+     <<"\"value\":">>, fix(jsone:decode(Value)),<<",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,Map,<<"\"}]}">>].
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,fix(jsone:decode(Map)),
+     <<"\"}]}">>].
+
+
 
 
 % ------------------------------------------------------------------------------
@@ -262,3 +266,11 @@ value_to_int(Key, Default, Body) ->
 
                     
                     
+fix(X) when is_binary(X) ->
+    Lst =  binary_to_list(X),
+    case (lists:nth(1, Lst)) of
+        34 -> X;
+        _ -> [<<"%22">>, X, <<"%22">>]
+    end;
+fix(X) ->
+    jsone:encode(X).

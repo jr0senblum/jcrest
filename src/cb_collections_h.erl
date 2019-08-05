@@ -1,7 +1,7 @@
 %%% ----------------------------------------------------------------------------
 %%% @author Jim Rosenblum
 %%% @copyright (C) 2020, Jim Rosenblum
-%%% @doc Module that manages RESTful interactions for Maps and Map collections.
+
 %%% This is a Cowboy handler handling DELETE, GET, HEAD, and OPTIONS
 %%% verbs for the RESTful collections of Map and Maps.
 %%%
@@ -32,6 +32,8 @@
                         body :: string() | [{jc:key(), jc:value()}]}).
 
 
+
+-define(ENCODE(T), jsone:encode(T, [{float_format, [{decimals, 4}, compact]}])).
 
 %%% ============================================================================
 %%% Module callbacks required for Cowboy handler
@@ -112,13 +114,13 @@ delete_resource(Req, #cb_coll_state{op = map} = State) ->
                                           State::#cb_coll_state{}.
 
 delete_completed(Req, #cb_coll_state{op = maps} = State) ->
-    {maps, Maps} = jc:maps(),
-    {length(Maps) == 0, Req, State};
+    {size, Sizes} = jc:cache_size(),
+    {key_to_value, {records, N}, _} = proplists:lookup(key_to_value, Sizes),
+    {N == 0, Req, State};
 
 delete_completed(Req, #cb_coll_state{op = map} = State) ->
-    MapName = cowboy_req:binding(map, Req),
-    {records, Size} = jc:map_size(MapName),
-    {Size == 0, Req, State}.
+    Map = cowboy_req:binding(map, Req),
+    {jc:map_exists(Map) == false, Req, State}.
 
 
 %% -----------------------------------------------------------------------------
@@ -241,19 +243,20 @@ kvs_to_json(Req, MapName, KVList) ->
     Url = [SHP, Path],
     ListOfMaps = 
         lists:foldl(fun({Key, Value}, Acc) ->
-                            [[<<"{\"key\":\"">>,Key,<<"\",">>,
-                              <<"\"value\":">>,Value,<<",">>,
+                            [[<<"{\"key\":\"">>, Key, <<"\",">>,
+                              <<"\"value\":">>,jsone:decode(Value),<<",">>,
                               <<"\"links\": [{\"rel\":\"self\",">>,
-                              <<"\"href\":\"">>, SHP, <<"/maps">>,MapName, <<"/">>, Key,
+                              <<"\"href\":\"">>, SHP, <<"/maps/">>,MapName, <<"/">>, Key, <<"\"},">>,
+                              <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,MapName,
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
                     KVList),
 
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"map_name\":\"">>, MapName, <<"\", \"results\": [">>, Separated, <<"],">>,
+    [<<"{\"map_name\":\"">>, MapName, <<"\", \"items\": [">>, Separated, <<"],">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"map_name\",\"href\":\"">>,SHP,<<"/maps/">>,MapName,<<"\"}]}">>].
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,MapName,<<"\"}]}">>].
 
 map_to_json(Req, MapName, KeyList) ->
     {SHP, Path} = get_URI(Req),
@@ -261,16 +264,16 @@ map_to_json(Req, MapName, KeyList) ->
     ListOfMaps = 
         lists:foldl(fun(Key, Acc) ->
                             {ok, Value} = jc:get(MapName, Key),
-                            [[<<"{\"key\":\"">>,Key,<<"\",">>,
-                              <<"\"value\":\"">>,Value,<<"\",">>,
+                            [[<<"{\"key\":">>, fix(jsone:decode(Key)), <<",">>,
+                              <<"\"value\":">>, fix(jsone:decode(Value)),<<",">>,
                               <<"\"links\": [{\"rel\":\"item\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>,Key,
+                              <<"\"href\":\"">>, Url, <<"/">>,fix(jsone:decode(Key)),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
                     KeyList),
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"map_name\":\"">>, MapName, <<"\", \"keys\": [">>, Separated, <<"],">>,
+    [<<"{\"map_name\":">>, MapName, <<", \"keys\": [">>, Separated, <<"],">>,
      <<"\"links\": {\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps\"}}">>].
 
 
@@ -283,9 +286,9 @@ maps_to_json(Req, MapList) ->
 
     ListOfMaps = 
         lists:foldl(fun(MapName, Acc) ->
-                            [[<<"{\"map_name\":\"">>,MapName,<<"\",">>,
+                            [[<<"{\"map_name\":">>,MapName,<<",">>,
                               <<"\"links\": [{\"rel\":\"collection\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>, MapName,
+                              <<"\"href\":\"">>, Url, <<"/">>,fix(jsone:decode(MapName)),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
@@ -294,4 +297,14 @@ maps_to_json(Req, MapList) ->
     [<<"{\"maps\":">>, <<"[">>, Separated, <<"]}">>].
     
 
+fix(X) when is_binary(X) ->
+    Lst =  binary_to_list(X),
+    case (lists:nth(1, Lst)) of
+        34 -> X;
+        _ -> [<<"%22">>, X, <<"%22">>]
+    end;
+fix(X) ->
+    jsone:encode(X).
 
+
+ 
