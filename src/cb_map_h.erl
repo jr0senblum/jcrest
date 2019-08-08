@@ -193,9 +193,9 @@ put_kv_jc_s(Req, Body, State, Seq) ->
     end.
 
 put_kv_jc(Req, Body, State) ->
-    Map = cowboy_req:binding(map, Req),
-    Key = cowboy_req:binding(key, Req),
-    Value = proplists:get_value(<<"value">>, Body),
+    Map = put_fix(cowboy_req:binding(map, Req)),
+    Key = put_fix(cowboy_req:binding(key, Req)),
+    Value = put_fix(proplists:get_value(<<"value">>, Body)),
     TTL = value_to_int(<<"ttl">>, 0, Body),
 
     lager:debug("~p: jc:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, Value, TTL]),
@@ -211,6 +211,22 @@ put_kv_jc(Req, Body, State) ->
     catch
         _:_ ->
             {false, Req, State}
+    end.
+
+
+put_fix(<<"true">>) -> <<"true">>;
+put_fix(<<"false">>) ->  <<"false">>;
+put_fix(<<"null">>) -> <<"null">>;
+put_fix(BString) ->
+    try binary_to_integer(BString) of
+        _ -> BString
+    catch
+        error:badarg ->
+            <<First:1/binary, _/binary>> = BString,
+            case First of
+                <<"\"">> -> BString;
+                _        -> <<"\"", BString/binary, "\"">>
+            end
     end.
 
 
@@ -237,10 +253,10 @@ kv_to_json(Req, Map, Key, Value) ->
     {SHP, Path} = get_URI(Req),
     Url = [SHP, Path],
     [<<"{\"map_name\":">>, Map, <<",">>,
-     <<"\"key\":">>, fix(jsone:decode(Key)), <<",">>,
-     <<"\"value\":">>, fix(jsone:decode(Value)),<<",">>,
+     <<"\"key\":">>, Key, <<",">>,
+     <<"\"value\":">>, Value,<<",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,fix(jsone:decode(Map)),
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, fix(jsone:decode(Map)),
      <<"\"}]}">>].
 
 
@@ -265,12 +281,14 @@ value_to_int(Key, Default, Body) ->
     end.
 
                     
-                    
+
 fix(X) when is_binary(X) ->
+    io:format("is binary ~p X is ",[X]),
     Lst =  binary_to_list(X),
     case (lists:nth(1, Lst)) of
         34 -> X;
         _ -> [<<"%22">>, X, <<"%22">>]
     end;
 fix(X) ->
+    io:format("is not binary ~p X is ",[X]),
     jsone:encode(X).

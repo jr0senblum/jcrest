@@ -19,7 +19,7 @@ all_my_test_() ->
 
 
 % Empty cache, maps should not exist.
-% Use first test to start up the server. Not great, but.
+% Use first test to start up the server. Not great, but...
 empty_test() ->
     net_kernel:start(['jc@127.0.0.1', longnames]),
     application:set_env(jc, cache_nodes, ['jc@127.0.0.1']),
@@ -110,26 +110,26 @@ head_test() ->
                        [_date, _server,
                         {"content-length","0"}],
                        []}},
-                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed", []}, [], [])),
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/%22bed%22", []}, [], [])),
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
                        [_date, _server,
                         {"content-length","0"}],
                        []}},
-                 httpc:request(head, {"http://127.0.0.1:8080/maps/not", []}, [], [])),
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/%22not%22", []}, [], [])),
     
     ?assertMatch({ok,{{"HTTP/1.1",200,"OK"},
                        [_date, _server,
                         {"content-length",_},
                         {"content-type","application/json"}],
                        []}},
-                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed/1", []}, [], [])),
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/%22bed%22/1", []}, [], [])),
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
                        [_date, _server,
                         {"content-length","0"}],
                        []}},
-                 httpc:request(head, {"http://127.0.0.1:8080/maps/bed/11", []}, [], [])).
+                 httpc:request(head, {"http://127.0.0.1:8080/maps/%22bed%22/11", []}, [], [])).
 
 
 % Put should create, update to existing should return no content.   
@@ -321,8 +321,8 @@ search_test() ->
                       <<"width">> => 500}}},
     Off = jwalk:set({"widget","debug"}, On, <<"off">>),
 
-    jc:put(<<"\"graphics\"">>, <<"on">>, jsone:encode(On)),
-    jc:put(<<"\"graphics\"">>, <<"off">>, jsone:encode(Off)),
+    jc:put(<<"\"graphics\"">>, <<"\"on\"">>, jsone:encode(On)),
+    jc:put(<<"\"graphics\"">>, <<"\"off\"">>, jsone:encode(Off)),
 
 
 

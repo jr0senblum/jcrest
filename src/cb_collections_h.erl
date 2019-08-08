@@ -243,31 +243,29 @@ kvs_to_json(Req, MapName, KVList) ->
     Url = [SHP, Path],
     ListOfMaps = 
         lists:foldl(fun({Key, Value}, Acc) ->
-                            [[<<"{\"key\":\"">>, Key, <<"\",">>,
-                              <<"\"value\":">>,jsone:decode(Value),<<",">>,
+                            [[<<"{\"key\":">>, Key, <<",">>,
+                              <<"\"value\":">>, Value,<<",">>,
                               <<"\"links\": [{\"rel\":\"self\",">>,
-                              <<"\"href\":\"">>, SHP, <<"/maps/">>,MapName, <<"/">>, Key, <<"\"},">>,
-                              <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,MapName,
-                              <<"\"}]}">>]|Acc]
+                              <<"\"href\":\"">>, SHP, <<"/maps/">>,fix(MapName), <<"/">>, fix(Key), <<"\"},">>,
+                              <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,fix(MapName), <<"\"}">>,
+                              <<"]}">>]|Acc]
                     end,
                     [],
                     KVList),
 
     Separated = lists:join(<<",">>,ListOfMaps),
-    [<<"{\"map_name\":\"">>, MapName, <<"\", \"items\": [">>, Separated, <<"],">>,
+    [<<"{\"map_name\":">>, MapName, <<", \"items\": [">>, Separated, <<"],">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,MapName,<<"\"}]}">>].
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,fix(MapName),<<"\"}]}">>].
 
 map_to_json(Req, MapName, KeyList) ->
     {SHP, Path} = get_URI(Req),
     Url = [SHP, Path],
     ListOfMaps = 
         lists:foldl(fun(Key, Acc) ->
-                            {ok, Value} = jc:get(MapName, Key),
-                            [[<<"{\"key\":">>, fix(jsone:decode(Key)), <<",">>,
-                              <<"\"value\":">>, fix(jsone:decode(Value)),<<",">>,
+                            [[<<"{\"key\":">>, Key, <<",">>,
                               <<"\"links\": [{\"rel\":\"item\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>,fix(jsone:decode(Key)),
+                              <<"\"href\":\"">>, Url, <<"/">>,fix(Key),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
@@ -285,26 +283,30 @@ maps_to_json(Req, MapList) ->
     Url = [SHP, Path],
 
     ListOfMaps = 
-        lists:foldl(fun(MapName, Acc) ->
+        lists:foldl(fun(MapName, Acc) ->    io:format("MapName is ~p~n",[MapName]),
                             [[<<"{\"map_name\":">>,MapName,<<",">>,
                               <<"\"links\": [{\"rel\":\"collection\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>,fix(jsone:decode(MapName)),
+                              <<"\"href\":\"">>, Url, <<"/">>,fix(MapName),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
                     MapList),
     Separated = lists:join(<<",">>,ListOfMaps),
     [<<"{\"maps\":">>, <<"[">>, Separated, <<"]}">>].
-    
 
-fix(X) when is_binary(X) ->
-    Lst =  binary_to_list(X),
-    case (lists:nth(1, Lst)) of
-        34 -> X;
-        _ -> [<<"%22">>, X, <<"%22">>]
-    end;
-fix(X) ->
-    jsone:encode(X).
+
+fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
+    binary:replace(Term, <<"\"">>, <<"%22">>, [global]);
+fix(Term) when Term == <<"true">>; Term == <<"false">>; Term == <<"null">> ->
+    Term;
+fix (Term) ->
+    try binary_to_integer(Term) of
+        _Int-> Term
+    catch
+        error:badarg ->
+            io:format("~p !!!!!~n",[Term]),
+            <<"%22", Term/binary, "%22">>
+    end.
 
 
  
