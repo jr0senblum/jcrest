@@ -126,8 +126,8 @@ delete_resource(Req, State) ->
                                            State::#cb_map_state{}.
 
 resource_exists(Req, State) ->
-    Map = cowboy_req:binding(map, Req),
-    Key = cowboy_req:binding(key, Req),
+    Map = put_fix(cowboy_req:binding(map, Req)),
+    Key = put_fix(cowboy_req:binding(key, Req)),
     Result = case jc:get(Map, Key) of
                 miss -> miss;
                 {ok, Value} -> Value
@@ -256,7 +256,7 @@ kv_to_json(Req, Map, Key, Value) ->
      <<"\"key\":">>, Key, <<",">>,
      <<"\"value\":">>, Value,<<",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, fix(jsone:decode(Map)),
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, fix(Map),
      <<"\"}]}">>].
 
 
@@ -282,13 +282,7 @@ value_to_int(Key, Default, Body) ->
 
                     
 
-fix(X) when is_binary(X) ->
-    io:format("is binary ~p X is ",[X]),
-    Lst =  binary_to_list(X),
-    case (lists:nth(1, Lst)) of
-        34 -> X;
-        _ -> [<<"%22">>, X, <<"%22">>]
-    end;
-fix(X) ->
-    io:format("is not binary ~p X is ",[X]),
-    jsone:encode(X).
+fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
+    binary:replace(Term, <<"\"">>, <<"%22">>, [global]);
+fix(Term) ->
+    Term.

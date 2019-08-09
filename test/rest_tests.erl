@@ -15,7 +15,9 @@ all_my_test_() ->
      {"Head test - no complaints", fun head_test/0},
      {"Simple put test", fun simple_put_test/0},
      {"Delete mkv test", fun delete_mkv_test/0},
-     {"Get and navigation for Map and Maps", fun hateoas_test/0}].
+     {"Delete map test", fun delete_map_test/0},
+     {"Get and navigation for Map and Maps", fun hateoas_test/0},
+     {"Seq and TTL tests", fun seq_test/0}].
 
 
 % Empty cache, maps should not exist.
@@ -154,18 +156,32 @@ simple_put_test() ->
                  httpc:request(put, {"http://127.0.0.1:8080/maps/aMap/key1", 
                                      [],
                                      "application/x-www-form-urlencoded",
-                                     "value=\"key1Value\""}, [], [])).
+                                     "value=\"key1Value\""}, [], [])),
+
+    ?assertMatch({ok,{{"HTTP/1.1",201,"Created"},
+                       [_date,
+                        {"location","http://127.0.0.1:8080/maps/true/false"},
+                        {"server","Cowboy"},
+                        {"content-length","0"}],
+                      []}},
+                 httpc:request(put, {"http://127.0.0.1:8080/maps/true/false", 
+                                     [],
+                                     "application/x-www-form-urlencoded",
+                                     "value=null"}, [], [])),
+
+    ?assertEqual(jc:get(<<"true">>, <<"false">>), {ok, <<"null">>}).
 
 % Delete Map Key Value test
 delete_mkv_test() ->
     jc:flush(),
     jc:put(<<"\"bed\"">>,<<"1">>,<<"1">>),
+    jc:put(<<"\"bed\"">>,<<"2">>,<<"2">>),
     ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
                       [_date,
                        {"server","Cowboy"}],
                       []}},
                  httpc:request(delete, 
-                               {"http://127.0.0.1:8080/maps/bed/1",
+                               {"http://127.0.0.1:8080/maps/%22bed%22/1",
                                 []}, [], [])),
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
@@ -175,7 +191,20 @@ delete_mkv_test() ->
                       []}},
                  httpc:request(delete, 
                                {"http://127.0.0.1:8080/maps/bed/1",
-                                []}, [], [])).
+                                []}, [], [])),
+    ?assertEqual(miss, jc:get(<<"\"bed\"">>, <<"1">>)),
+    ?assertEqual({ok, <<"2">>}, jc:get(<<"\"bed\"">>, <<"2">>)),
+
+    ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
+                      [_date,
+                       {"server","Cowboy"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps/%22bed%22/2",
+                                []}, [], [])),
+    ?assertEqual(miss, jc:get(<<"\"bed\"">>, 2)),
+    ?assertEqual(false, jc:map_exists(<<"\"bed\"">>)).
+
 
 % Delete Map test
 delete_map_test() ->
@@ -190,7 +219,7 @@ delete_map_test() ->
                        {"server","Cowboy"}],
                       []}},
                  httpc:request(delete, 
-                               {"http://127.0.0.1:8080/maps/bed",
+                               {"http://127.0.0.1:8080/maps/%22bed%22",
                                 []}, [], [])),
 
     ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
@@ -199,12 +228,33 @@ delete_map_test() ->
                        {"content-length","0"}],
                       []}},
                  httpc:request(delete, 
-                               {"http://127.0.0.1:8080/maps/bed",
+                               {"http://127.0.0.1:8080/maps/%22bed%22",
                                 []}, [], [])),
 
     ?assertEqual(jc:map_exists(<<"\"other\"">>), true),
-    ?assertEqual(jc:map_exists(<<"\"bed\"">>), false).
+    ?assertEqual(jc:map_exists(<<"\"bed\"">>), false),
 
+    jc:put(<<"\"bed\"">>,<<"1">>,<<"1">>),
+
+    ?assertMatch({ok,{{"HTTP/1.1",204,"No Content"},
+                      [_date,
+                       {"server","Cowboy"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps",
+                                []}, [], [])),
+
+    ?assertEqual(jc:map_exists(<<"\"other\"">>), false),
+    ?assertEqual(jc:map_exists(<<"\"bed\"">>), false),
+
+    ?assertMatch({ok,{{"HTTP/1.1",404,"Not Found"},
+                      [_date,
+                       {"server","Cowboy"},
+                       {"content-length","0"}],
+                      []}},
+                 httpc:request(delete, 
+                               {"http://127.0.0.1:8080/maps",
+                                []}, [], [])).
 
 
 
@@ -225,50 +275,48 @@ hateoas_test()->
 
     % Should contains the two maps, map1 and map2
     MapNames = jwalk:get({"maps","map_name"}, JMap),
-    lists:member(<<"\"map2\"">>, MapNames),
-    lists:member(<<"\"map1\"">>, MapNames),
+    lists:member(<<"map2">>, MapNames),
+    lists:member(<<"map1">>, MapNames),
     2 = length(MapNames),
 
     % map1 portion of the jason contains map1 json, and that contains the URL
     % for the map1 collection
-    Map1 = jwalk:get({"maps",{select,{"map_name", "\"map1\""}}}, JMap),
-    <<"http://127.0.0.1:8080/maps/map1">> = 
+    Map1 = jwalk:get({"maps",{select,{"map_name", "map1"}}}, JMap),
+    <<"http://127.0.0.1:8080/maps/%22map1%22">> = 
         jwalk:get({"links",{select, {"rel", "collection"}}, "href", 1}, Map1),
 
     % map2 portion of the jason contains map2 json, and that contains the URL
     % for the map1 collection.
-    Map2 = jwalk:get({"maps",{select,{"map_name", "\"map2\""}}}, JMap),
-    <<"http://127.0.0.1:8080/maps/map2">> = 
+    Map2 = jwalk:get({"maps",{select,{"map_name", "map2"}}}, JMap),
+    <<"http://127.0.0.1:8080/maps/%22map2%22">> = 
         jwalk:get({"links",{select, {"rel", "collection"}}, "href", 1}, Map2),
     
 
     % GET on map should return JSON representation of the map collection
     {ok, {{_, 200, "OK"}, _, Map}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/map2", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/%22map2%22", []}, [], []),
     
     % Convert result to map
     JMapC = jsone:decode(list_to_binary(Map)),
 
     % Should be looking at map2
-    <<"\"map2\"">> = jwalk:get({"\"map_name\""}, JMapC),
+    <<"map2">> = jwalk:get({"map_name"}, JMapC),
 
     % Should have two keys, key1 and key2 with value1 and value2
     Keys = jwalk:get({"keys"}, JMapC),
     2 = length(Keys),
-    <<"\"key1\"">> = jwalk:get({"keys",{select, {"key","\"key1\""}},"key", 1}, JMapC),
-    <<"\"key2\"">> = jwalk:get({"keys",{select, {"key","\"key2\""}},"key", 1}, JMapC),
-    <<"\"value1\"">> = jwalk:get({"keys",{select, {"key","\"key1\""}},"value", 1}, JMapC),
-    <<"\"value2\"">> = jwalk:get({"keys",{select, {"key","\"key2\""}},"value", 1}, JMapC),
+    <<"key1">> = jwalk:get({"keys",{select, {"key","key1"}},"key", 1}, JMapC),
+    <<"key2">> = jwalk:get({"keys",{select, {"key","key2"}},"key", 1}, JMapC),
 
     % Parent should be the maps collection
     <<"parent">> =jwalk:get({"links","rel"}, JMapC),
     <<"http://127.0.0.1:8080/maps">> =jwalk:get({"links","href"}, JMapC),
 
     % Get the item
-    <<"item">> = jwalk:get({"keys",{select, {"key","\"key1\""}},"links", "rel", 1}, JMapC),
-    <<"item">> = jwalk:get({"keys",{select, {"key","\"key2\""}},"links", "rel", 1}, JMapC),
-    Key1Ref = jwalk:get({"keys",{select, {"key","\"key1\""}},"links", "href", 1}, JMapC),
-    Key2Ref = jwalk:get({"keys",{select, {"key","\"key2\""}},"links", "href", 1}, JMapC),
+    <<"item">> = jwalk:get({"keys",{select, {"key","key1"}},"links", "rel", 1}, JMapC),
+    <<"item">> = jwalk:get({"keys",{select, {"key","key2"}},"links", "rel", 1}, JMapC),
+    Key1Ref = jwalk:get({"keys",{select, {"key","key1"}},"links", "href", 1}, JMapC),
+    Key2Ref = jwalk:get({"keys",{select, {"key","key2"}},"links", "href", 1}, JMapC),
     
     % GET on Key1 should return JSON representation of the m,k,v collection
     {ok, {{_, 200, "OK"}, _, Item}} = 
@@ -276,12 +324,12 @@ hateoas_test()->
     
     % Convert result to map
     JItem = jsone:decode(list_to_binary(Item)),
-    <<"\"map2\"">> = jwalk:get({"map_name"}, JItem),
-    <<"\"key1\"">> = jwalk:get({"key"}, JItem),
-    <<"\"value1\"">> = jwalk:get({"value"}, JItem),
+    <<"map2">> = jwalk:get({"map_name"}, JItem),
+    <<"key1">> = jwalk:get({"key"}, JItem),
+    <<"value1">> = jwalk:get({"value"}, JItem),
 
-    <<"http://127.0.0.1:8080/maps/map2">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem),
-    <<"http://127.0.0.1:8080/maps/map2/key1">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem),
+    <<"http://127.0.0.1:8080/maps/%22map2%22">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem),
+    <<"http://127.0.0.1:8080/maps/%22map2%22/%22key1%22">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem),
 
 
     % GET on Key2 should return JSON representation of the m,k,v collection
@@ -290,12 +338,12 @@ hateoas_test()->
     
     % Convert result to map
     JItem2 = jsone:decode(list_to_binary(Item2)),
-    <<"\"map2\"">> = jwalk:get({"map_name"}, JItem2),
-    <<"\"key2\"">> = jwalk:get({"key"}, JItem2),
-    <<"\"value2\"">> = jwalk:get({"value"}, JItem2),
+    <<"map2">> = jwalk:get({"map_name"}, JItem2),
+    <<"key2">> = jwalk:get({"key"}, JItem2),
+    <<"value2">> = jwalk:get({"value"}, JItem2),
 
-    <<"http://127.0.0.1:8080/maps/map2">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem2),
-    <<"http://127.0.0.1:8080/maps/map2/key2">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem2).
+    <<"http://127.0.0.1:8080/maps/%22map2%22">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem2),
+    <<"http://127.0.0.1:8080/maps/%22map2%22/%22key2%22">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem2).
     
 
 
@@ -331,29 +379,63 @@ search_test() ->
            {"server","Cowboy"},
            {"content-length", _},
            {"content-type","application/json"}], Result}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/graphics/search/widget.image.name=%22sun1%22", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.image.name=%22sun1%22", []}, [], []),
     AsMap = jsone:decode(list_to_binary(Result)),
     
     Items = maps:get(<<"items">>, AsMap),
     ?assertEqual(2, length(Items)),
 
-    ?assertEqual(<<"\"off\"">>, maps:get(<<"key">>,lists:nth(1,Items))),
-    ?assertEqual(<<"\"on\"">>, maps:get(<<"key">>,lists:nth(2,Items))),
+    ?assertEqual(<<"off">>, maps:get(<<"key">>,lists:nth(1,Items))),
+    ?assertEqual(<<"on">>, maps:get(<<"key">>,lists:nth(2,Items))),
 
     { ok,{{"HTTP/1.1",200,"OK"},
           [_date,
            {"server","Cowboy"},
            {"content-length", _},
            {"content-type","application/json"}], Results2}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/graphics/search/widget.debug=%22off%22", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.debug=%22off%22", []}, [], []),
     AsMap2 = jsone:decode(list_to_binary(Results2)),
     
     Items2 = maps:get(<<"items">>, AsMap2),
     ?assertEqual(1, length(Items2)),
 
-    ?assertEqual(<<"\"off\"">>, maps:get(<<"key">>,lists:nth(1,Items2))).
+    ?assertEqual(<<"off">>, maps:get(<<"key">>,lists:nth(1,Items2))),
+
+    { ok,{{"HTTP/1.1",404, "Not Found"},
+          [_date,
+           {"server","Cowboy"},
+           {"content-length", "0"}], []}} = 
+        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.debug=1", []}, [], []).
 
     
+seq_test() ->
+    {ok,{{"HTTP/1.1",201,"Created"},
+         [_date,
+          {"location","http://127.0.0.1:8080/maps/map11/ttlKey"},
+          {"server","Cowboy"},
+          {"content-length","0"}],
+         []}
+    } = httpc:request(put, {"http://127.0.0.1:8080/maps/map11/ttlKey", 
+                            [],
+                            "application/x-www-form-urlencoded",
+                            "value=value2&ttl=3&sequence=10"}, [], []),
+
+    {ok, <<"value2">>} = jc:get(<<"map11">>, <<"ttlKey">>),
+
+    % Bad request because of lower sequence no.
+    {ok,{{"HTTP/1.1",400,"Bad Request"},
+         [_date,
+          {"location","http://127.0.0.1:8080/maps/map11/ttlKey"},
+          {"server","Cowboy"},
+          {"content-length","0"}],
+         []}
+    } = httpc:request(put, {"http://127.0.0.1:8080/maps/map11/ttlKey", 
+                            [],
+                            "application/x-www-form-urlencoded",
+                            "value=value2&ttl=3&sequence=1"}, [], []),
+    timer:sleep(3004),
+
+    miss = jc:get(<<"map11">>, <<"ttlKey">>).
 
 
 

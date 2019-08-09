@@ -283,7 +283,7 @@ maps_to_json(Req, MapList) ->
     Url = [SHP, Path],
 
     ListOfMaps = 
-        lists:foldl(fun(MapName, Acc) ->    io:format("MapName is ~p~n",[MapName]),
+        lists:foldl(fun(MapName, Acc) -> 
                             [[<<"{\"map_name\":">>,MapName,<<",">>,
                               <<"\"links\": [{\"rel\":\"collection\",">>,
                               <<"\"href\":\"">>, Url, <<"/">>,fix(MapName),
@@ -297,16 +297,8 @@ maps_to_json(Req, MapList) ->
 
 fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
     binary:replace(Term, <<"\"">>, <<"%22">>, [global]);
-fix(Term) when Term == <<"true">>; Term == <<"false">>; Term == <<"null">> ->
-    Term;
-fix (Term) ->
-    try binary_to_integer(Term) of
-        _Int-> Term
-    catch
-        error:badarg ->
-            io:format("~p !!!!!~n",[Term]),
-            <<"%22", Term/binary, "%22">>
-    end.
+fix(Term) ->
+    Term.
 
 
  
