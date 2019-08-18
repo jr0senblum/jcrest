@@ -100,7 +100,7 @@ delete_resource(Req, #cb_coll_state{op = maps} = State) ->
     {true, Req, State};
 
 delete_resource(Req, #cb_coll_state{op = map} = State) ->
-    MapName = cowboy_req:binding(map, Req),   
+    MapName = unfix(cowboy_req:binding(map, Req)),   
     ok = jc:clear(MapName),
     {true, Req, State}.
 
@@ -119,7 +119,7 @@ delete_completed(Req, #cb_coll_state{op = maps} = State) ->
     {N == 0, Req, State};
 
 delete_completed(Req, #cb_coll_state{op = map} = State) ->
-    Map = cowboy_req:binding(map, Req),
+    Map = unfix(cowboy_req:binding(map, Req)),
     {jc:map_exists(Map) == false, Req, State}.
 
 
@@ -136,15 +136,14 @@ resource_exists(Req, #cb_coll_state{op = maps} = State) ->
     {N > 0, Req, State};
 
 resource_exists(Req, #cb_coll_state{op = map} = State) ->
-    Map = cowboy_req:binding(map, Req),
-    
+    Map = unfix(cowboy_req:binding(map, Req)),
     {jc:map_exists(Map), Req, State};
 
 resource_exists(Req, #cb_coll_state{op = search} = State) ->
     % If the resource exists, store in the State so we don't have to
     % pull them again as the GET unfolds.
-    Map = cowboy_req:binding(map, Req),
-    Path = cowboy_req:binding(path, Req),
+    Map = unfix(cowboy_req:binding(map, Req)),
+    Path = unfix(cowboy_req:binding(path, Req)),
 
     case jc:values_match(Map, Path) of
         {ok, []} ->
@@ -190,7 +189,7 @@ collection_to_json(Req, #cb_coll_state{op = maps} = State) ->
 % kv collection is the result of a json .path search, KVList is the results of
 % the search.
 kv_collection_body(#{method := Verb} = Req, KVList) ->
-    MapName = cowboy_req:binding(map, Req),
+    MapName = unfix(cowboy_req:binding(map, Req)),
     lager:debug("~p: ~p map ~p as JSON.",[?MODULE, Verb, MapName]),
     case Verb of
         <<"GET">> ->
@@ -200,7 +199,7 @@ kv_collection_body(#{method := Verb} = Req, KVList) ->
     end.
 
 map_collection_body(#{method := Verb} = Req) ->
-    MapName = cowboy_req:binding(map, Req),
+    MapName = unfix(cowboy_req:binding(map, Req)),
     lager:debug("~p: ~p map ~p as JSON.",[?MODULE, Verb, MapName]),
     case Verb of
         <<"GET">> ->
@@ -296,9 +295,13 @@ maps_to_json(Req, MapList) ->
 
 
 fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
-    binary:replace(Term, <<"\"">>, <<"%22">>, [global]);
+    binary:replace(Term, <<"\"">>, <<"*">>, [global]);
 fix(Term) ->
     Term.
 
 
  
+unfix(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
+    binary:replace(Term, <<"*">>, <<"\"">>, [global]);
+unfix(Term) ->
+    Term.

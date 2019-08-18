@@ -282,19 +282,19 @@ hateoas_test()->
     % map1 portion of the jason contains map1 json, and that contains the URL
     % for the map1 collection
     Map1 = jwalk:get({"maps",{select,{"map_name", "map1"}}}, JMap),
-    <<"http://127.0.0.1:8080/maps/%22map1%22">> = 
+    <<"http://127.0.0.1:8080/maps/*map1*">> = 
         jwalk:get({"links",{select, {"rel", "collection"}}, "href", 1}, Map1),
 
     % map2 portion of the jason contains map2 json, and that contains the URL
     % for the map1 collection.
     Map2 = jwalk:get({"maps",{select,{"map_name", "map2"}}}, JMap),
-    <<"http://127.0.0.1:8080/maps/%22map2%22">> = 
+    <<"http://127.0.0.1:8080/maps/*map2*">> = 
         jwalk:get({"links",{select, {"rel", "collection"}}, "href", 1}, Map2),
     
 
     % GET on map should return JSON representation of the map collection
     {ok, {{_, 200, "OK"}, _, Map}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/%22map2%22", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/*map2*", []}, [], []),
     
     % Convert result to map
     JMapC = jsone:decode(list_to_binary(Map)),
@@ -328,8 +328,8 @@ hateoas_test()->
     <<"key1">> = jwalk:get({"key"}, JItem),
     <<"value1">> = jwalk:get({"value"}, JItem),
 
-    <<"http://127.0.0.1:8080/maps/%22map2%22">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem),
-    <<"http://127.0.0.1:8080/maps/%22map2%22/%22key1%22">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem),
+    <<"http://127.0.0.1:8080/maps/*map2*">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem),
+    <<"http://127.0.0.1:8080/maps/*map2*/*key1*">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem),
 
 
     % GET on Key2 should return JSON representation of the m,k,v collection
@@ -342,8 +342,8 @@ hateoas_test()->
     <<"key2">> = jwalk:get({"key"}, JItem2),
     <<"value2">> = jwalk:get({"value"}, JItem2),
 
-    <<"http://127.0.0.1:8080/maps/%22map2%22">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem2),
-    <<"http://127.0.0.1:8080/maps/%22map2%22/%22key2%22">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem2).
+    <<"http://127.0.0.1:8080/maps/*map2*">> = jwalk:get({"links", {select,{"rel","parent"}},"href",1}, JItem2),
+    <<"http://127.0.0.1:8080/maps/*map2*/*key2*">> =  jwalk:get({"links", {select,{"rel","self"}},"href",1}, JItem2).
     
 
 
@@ -379,7 +379,7 @@ search_test() ->
            {"server","Cowboy"},
            {"content-length", _},
            {"content-type","application/json"}], Result}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.image.name=%22sun1%22", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/*graphics*/search/widget.image.name=%22sun1%22", []}, [], []),
     AsMap = jsone:decode(list_to_binary(Result)),
     
     Items = maps:get(<<"items">>, AsMap),
@@ -393,7 +393,7 @@ search_test() ->
            {"server","Cowboy"},
            {"content-length", _},
            {"content-type","application/json"}], Results2}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.debug=%22off%22", []}, [], []),
+        httpc:request(get, {"http://127.0.0.1:8080/maps/*graphics*/search/widget.debug=%22off%22", []}, [], []),
     AsMap2 = jsone:decode(list_to_binary(Results2)),
     
     Items2 = maps:get(<<"items">>, AsMap2),
@@ -405,7 +405,7 @@ search_test() ->
           [_date,
            {"server","Cowboy"},
            {"content-length", "0"}], []}} = 
-        httpc:request(get, {"http://127.0.0.1:8080/maps/%22graphics%22/search/widget.debug=1", []}, [], []).
+        httpc:request(get, {"http://127.0.0.1:8080/maps/*graphics*/search/widget.debug=1", []}, [], []).
 
     
 seq_test() ->
@@ -420,7 +420,7 @@ seq_test() ->
                             "application/x-www-form-urlencoded",
                             "value=value2&ttl=3&sequence=10"}, [], []),
 
-    {ok, <<"value2">>} = jc:get(<<"map11">>, <<"ttlKey">>),
+    {ok, <<"\"value2\"">>} = jc:get(<<"\"map11\"">>, <<"\"ttlKey\"">>),
 
     % Bad request because of lower sequence no.
     {ok,{{"HTTP/1.1",400,"Bad Request"},
@@ -435,7 +435,7 @@ seq_test() ->
                             "value=value2&ttl=3&sequence=1"}, [], []),
     timer:sleep(3004),
 
-    miss = jc:get(<<"map11">>, <<"ttlKey">>).
+    miss = jc:get(<<"\"map11\"">>, <<"\"ttlKey\"">>).
 
 
 

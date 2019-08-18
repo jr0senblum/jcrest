@@ -1,4 +1,4 @@
-%%% ----------------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %%% @author Jim Rosenblum
 %%% @copyright (C) 2018-2019, Jim Rosenblum
 %%% @doc Module that manages RESTful interactions for Maps and Map collections).
@@ -25,11 +25,18 @@
          resource_exists/2
         ]).
 
+-type jctype() :: 'miss' | true | false | null | string().
+
 % Callbacks that construct JSON responses to GET and does the actual put.
 -export([kv_to_json/2, put_kv/2]).
 
-% Handler state. When resource_exists = true, cache result in value.
--record(cb_map_state, {value :: string()}).
+% Handler state. When resource_exists = true, cache results in value.
+-record(cb_map_state, {map        = miss  :: jctype(),
+                       key        = miss  :: jctype(),
+                       orig_value = miss  :: jctype(),
+                       new_value  = miss  :: string() | 'miss', 
+                       sequence   = false :: string() | 'miss', 
+                       ttl        = 0     :: non_neg_integer()}).
 
 
 -define(ENCODE(T), jsone:encode(T, [{float_format, [{decimals, 4}, compact]}])).
@@ -47,7 +54,7 @@
                                  State::#cb_map_state{}.
 
 init(Req, _Opts) ->
-    State = #cb_map_state{value = ""},
+    State = #cb_map_state{},
     {cowboy_rest, Req, State}.
 
 
@@ -107,11 +114,9 @@ content_types_accepted(Req, State) ->
                                           Req::cowboy_req:req(),
                                           State::#cb_map_state{}.
 
-delete_resource(Req, State) ->
-    MapName = cowboy_req:binding(map, Req),
-    KeyName = cowboy_req:binding(key, Req),
-    lager:debug("~p: DELETing ~,~.", [MapName, KeyName]),
-    try jc:evict(MapName, KeyName) of
+delete_resource(Req, #cb_map_state{map=Map, key=Key} =State) ->
+    lager:debug("~p: DELETE(ing) ~p, ~p.", [Map, Key]),
+    try jc:evict(Map, Key) of
         ok -> {true, Req, State}
     catch
         _:_ -> {false, Req, State}
@@ -120,22 +125,44 @@ delete_resource(Req, State) ->
 
 %% -----------------------------------------------------------------------------
 %% Return true if the resource exists, cache the value if the KV does exist.
+%% All actions hit this, so cache results for other REST verbs
 %%
 -spec resource_exists (Req, State) -> {boolean(), Req, State}
                                       when Req::cowboy_req:req(),
                                            State::#cb_map_state{}.
 
 resource_exists(Req, State) ->
-    Map = put_fix(cowboy_req:binding(map, Req)),
-    Key = put_fix(cowboy_req:binding(key, Req)),
+    Map = put_fix(unfix(cowboy_req:binding(map, Req))),
+    Key = put_fix(unfix(cowboy_req:binding(key, Req))),
+    {V, TTL, Seq, Req1} = get_values(Req),
+
+    VFixed = case V of
+                 miss -> miss;
+                 V -> put_fix(V)
+             end,
+                   
     Result = case jc:get(Map, Key) of
                 miss -> miss;
                 {ok, Value} -> Value
             end,
-    {miss /= Result, Req, State#cb_map_state{value=Result}}.
+    {miss /= Result, Req1, State#cb_map_state{map = Map,
+                                              key = Key,
+                                              orig_value = Result,
+                                              new_value = VFixed,
+                                              ttl = TTL,
+                                              sequence = Seq}}.
 
 
+% pull out the value, TTL, and sequence in a request.
+get_values(Req) ->
+    {ok, Body, Req1} = cowboy_req:read_urlencoded_body(Req),
 
+    V = proplists:get_value(<<"value">>, Body, miss),
+    T = value_to_int(<<"ttl">>, 0, Body),
+    S = value_to_int(<<"sequence">>, false, Body),
+                       
+    {V, T, S, Req1}.
+                                            
 
 %%% ============================================================================
 %%% Function to package MKV into JSON and function for handling put
@@ -150,9 +177,7 @@ resource_exists(Req, State) ->
                                            Req::cowboy_req:req(),
                                            State::#cb_map_state{}.
 
-kv_to_json(Req, #cb_map_state{value = Value} = State) -> 
-    Map = cowboy_req:binding(map, Req),
-    Key = cowboy_req:binding(key, Req),
+kv_to_json(Req, #cb_map_state{map=Map, key=Key, orig_value = Value} = State) -> 
     lager:debug("~p: GET ~p:~p.",[?MODULE, Map, Key]),
 
     {kv_to_json(Req, Map, Key, Value), Req, State}.
@@ -165,22 +190,17 @@ kv_to_json(Req, #cb_map_state{value = Value} = State) ->
 -spec put_kv(Req, State) ->{true, Req, State}
                                       when Req::cowboy_req:req(),
                                            State::#cb_map_state{}.
-put_kv(Req, State) ->
-    {ok, Body, Req1} = cowboy_req:read_urlencoded_body(Req),
-    case value_to_int(<<"sequence">>, false, Body) of
-        false -> put_kv_jc(Req1, Body, State);
-        Seq -> put_kv_jc_s(Req1, Body, State, Seq)
+put_kv(Req, #cb_map_state{sequence=S}=State) ->
+    case S of
+        false -> put_kv_jc(Req, State);
+        _Sequence -> put_kv_jc_s(Req, State)
     end.
     
-put_kv_jc_s(Req, Body, State, Seq) ->
-    Map = cowboy_req:binding(map, Req),
-    Key = cowboy_req:binding(key, Req),
-    Value = proplists:get_value(<<"value">>, Body),
-    TTL = value_to_int(<<"ttl">>, 0, Body),
+put_kv_jc_s(Req, #cb_map_state{map=Map, key=Key, new_value=V, sequence=S, ttl = T}=State) ->
     {SHP, Path} = get_URI(Req),
 
-    lager:debug("~p: jc_s:put(~p, ~p, ~p, ~p, ~p).",[?MODULE, Map, Key, Value, TTL, Seq]),
-    try jc_s:put(Map, Key, Value, TTL, Seq) of
+    lager:debug("~p: jc_s:put(~p, ~p, ~p, ~p, ~p).",[?MODULE, Map, Key, V, T, S]),
+    try jc_s:put(Map, Key, V, T, S) of
         {ok, Key} ->
             Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
             {true, Req1, State};
@@ -192,16 +212,11 @@ put_kv_jc_s(Req, Body, State, Seq) ->
             {false, Req, State}
     end.
 
-put_kv_jc(Req, Body, State) ->
-    Map = put_fix(cowboy_req:binding(map, Req)),
-    Key = put_fix(cowboy_req:binding(key, Req)),
-    Value = put_fix(proplists:get_value(<<"value">>, Body)),
-    TTL = value_to_int(<<"ttl">>, 0, Body),
-
-    lager:debug("~p: jc:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, Value, TTL]),
+put_kv_jc(Req, #cb_map_state{map=Map, key=Key, new_value = V, ttl = T}=State) ->
+    lager:debug("~p: jc:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, V, T]),
 
 
-    try jc:put(Map, Key, Value, TTL) of
+    try jc:put(Map, Key, V, T) of
         {ok, Key} ->
             {SHP, Path} = get_URI(Req),
             Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
@@ -214,6 +229,7 @@ put_kv_jc(Req, Body, State) ->
     end.
 
 
+% Ensure that we have either True, False, Null, Number or String
 put_fix(<<"true">>) -> <<"true">>;
 put_fix(<<"false">>) ->  <<"false">>;
 put_fix(<<"null">>) -> <<"null">>;
@@ -225,7 +241,7 @@ put_fix(BString) ->
             <<First:1/binary, _/binary>> = BString,
             case First of
                 <<"\"">> -> BString;
-                _        -> <<"\"", BString/binary, "\"">>
+                _E       -> <<"\"", BString/binary, "\"">>
             end
     end.
 
@@ -254,7 +270,7 @@ kv_to_json(Req, Map, Key, Value) ->
     Url = [SHP, Path],
     [<<"{\"map_name\":">>, Map, <<",">>,
      <<"\"key\":">>, Key, <<",">>,
-     <<"\"value\":">>, Value,<<",">>,
+     <<"\"value\":">>, Value, <<",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
      <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, fix(Map),
      <<"\"}]}">>].
@@ -283,6 +299,11 @@ value_to_int(Key, Default, Body) ->
                     
 
 fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
-    binary:replace(Term, <<"\"">>, <<"%22">>, [global]);
+    binary:replace(Term, <<"\"">>, <<"*">>, [global]);
 fix(Term) ->
+    Term.
+
+unfix(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
+    binary:replace(Term, <<"*">>, <<"\"">>, [global]);
+unfix(Term) ->
     Term.
