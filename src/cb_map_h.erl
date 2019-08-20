@@ -234,7 +234,8 @@ put_kv_jc(Req, #cb_map_state{map=Map, key=Key, new_value = V, ttl = T}=State) ->
     end.
 
 
-% Ensure that we have either True, False, Null, Number or String
+% Ensure that we have either True, False, Null, Number, start of JSON array
+% or object, or String.
 ensure_valid(<<"true">>) -> <<"true">>;
 ensure_valid(<<"false">>) ->  <<"false">>;
 ensure_valid(<<"null">>) -> <<"null">>;
@@ -246,6 +247,8 @@ ensure_valid(BString) ->
             <<First:1/binary, _/binary>> = BString,
             case First of
                 <<"\"">> -> BString;
+                <<"{">> -> BString;
+                <<"[">> -> BString;
                 _E       -> <<"\"", BString/binary, "\"">>
             end
     end.
