@@ -33,8 +33,6 @@
 
 
 
--define(ENCODE(T), jsone:encode(T, [{float_format, [{decimals, 4}, compact]}])).
-
 %%% ============================================================================
 %%% Module callbacks required for Cowboy handler
 %%% ============================================================================
@@ -100,7 +98,7 @@ delete_resource(Req, #cb_coll_state{op = maps} = State) ->
     {true, Req, State};
 
 delete_resource(Req, #cb_coll_state{op = map} = State) ->
-    MapName = unfix(cowboy_req:binding(map, Req)),   
+    MapName = uninternal2url(cowboy_req:binding(map, Req)),   
     ok = jc:clear(MapName),
     {true, Req, State}.
 
@@ -119,7 +117,7 @@ delete_completed(Req, #cb_coll_state{op = maps} = State) ->
     {N == 0, Req, State};
 
 delete_completed(Req, #cb_coll_state{op = map} = State) ->
-    Map = unfix(cowboy_req:binding(map, Req)),
+    Map = uninternal2url(cowboy_req:binding(map, Req)),
     {jc:map_exists(Map) == false, Req, State}.
 
 
@@ -136,14 +134,14 @@ resource_exists(Req, #cb_coll_state{op = maps} = State) ->
     {N > 0, Req, State};
 
 resource_exists(Req, #cb_coll_state{op = map} = State) ->
-    Map = unfix(cowboy_req:binding(map, Req)),
+    Map = uninternal2url(cowboy_req:binding(map, Req)),
     {jc:map_exists(Map), Req, State};
 
 resource_exists(Req, #cb_coll_state{op = search} = State) ->
     % If the resource exists, store in the State so we don't have to
     % pull them again as the GET unfolds.
-    Map = unfix(cowboy_req:binding(map, Req)),
-    Path = unfix(cowboy_req:binding(path, Req)),
+    Map = uninternal2url(cowboy_req:binding(map, Req)),
+    Path = uninternal2url(cowboy_req:binding(path, Req)),
 
     case jc:values_match(Map, Path) of
         {ok, []} ->
@@ -164,9 +162,9 @@ resource_exists(Req, #cb_coll_state{op = search} = State) ->
 %% Convert jc:key_set(map) and jc:maps() responses to json and 
 %%
 -spec collection_to_json(Req, State) ->{Value, Req, State}
-                                      when Value::nonempty_list(iodata()),
-                                           Req::cowboy_req:req(),
-                                           State::#cb_coll_state{}.
+                                           when Value::nonempty_list(iodata()),
+                                                Req::cowboy_req:req(),
+                                                State::#cb_coll_state{}.
 
 collection_to_json(Req, #cb_coll_state{op = map} = State) ->
     {map_collection_body(Req), Req, State};
@@ -189,7 +187,7 @@ collection_to_json(Req, #cb_coll_state{op = maps} = State) ->
 % kv collection is the result of a json .path search, KVList is the results of
 % the search.
 kv_collection_body(#{method := Verb} = Req, KVList) ->
-    MapName = unfix(cowboy_req:binding(map, Req)),
+    MapName = uninternal2url(cowboy_req:binding(map, Req)),
     lager:debug("~p: ~p map ~p as JSON.",[?MODULE, Verb, MapName]),
     case Verb of
         <<"GET">> ->
@@ -199,7 +197,7 @@ kv_collection_body(#{method := Verb} = Req, KVList) ->
     end.
 
 map_collection_body(#{method := Verb} = Req) ->
-    MapName = unfix(cowboy_req:binding(map, Req)),
+    MapName = uninternal2url(cowboy_req:binding(map, Req)),
     lager:debug("~p: ~p map ~p as JSON.",[?MODULE, Verb, MapName]),
     case Verb of
         <<"GET">> ->
@@ -245,8 +243,8 @@ kvs_to_json(Req, MapName, KVList) ->
                             [[<<"{\"key\":">>, Key, <<",">>,
                               <<"\"value\":">>, Value,<<",">>,
                               <<"\"links\": [{\"rel\":\"self\",">>,
-                              <<"\"href\":\"">>, SHP, <<"/maps/">>,fix(MapName), <<"/">>, fix(Key), <<"\"},">>,
-                              <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,fix(MapName), <<"\"}">>,
+                              <<"\"href\":\"">>, SHP, <<"/maps/">>,internal2url(MapName), <<"/">>, internal2url(Key), <<"\"},">>,
+                              <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>,internal2url(MapName), <<"\"}">>,
                               <<"]}">>]|Acc]
                     end,
                     [],
@@ -255,7 +253,7 @@ kvs_to_json(Req, MapName, KVList) ->
     Separated = lists:join(<<",">>,ListOfMaps),
     [<<"{\"map_name\":">>, MapName, <<", \"items\": [">>, Separated, <<"],">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,fix(MapName),<<"\"}]}">>].
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP,<<"/maps/">>,internal2url(MapName),<<"\"}]}">>].
 
 map_to_json(Req, MapName, KeyList) ->
     {SHP, Path} = get_URI(Req),
@@ -264,7 +262,7 @@ map_to_json(Req, MapName, KeyList) ->
         lists:foldl(fun(Key, Acc) ->
                             [[<<"{\"key\":">>, Key, <<",">>,
                               <<"\"links\": [{\"rel\":\"item\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>,fix(Key),
+                              <<"\"href\":\"">>, Url, <<"/">>,internal2url(Key),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
@@ -285,7 +283,7 @@ maps_to_json(Req, MapList) ->
         lists:foldl(fun(MapName, Acc) -> 
                             [[<<"{\"map_name\":">>,MapName,<<",">>,
                               <<"\"links\": [{\"rel\":\"collection\",">>,
-                              <<"\"href\":\"">>, Url, <<"/">>,fix(MapName),
+                              <<"\"href\":\"">>, Url, <<"/">>,internal2url(MapName),
                               <<"\"}]}">>]|Acc]
                     end,
                     [],
@@ -294,14 +292,19 @@ maps_to_json(Req, MapList) ->
     [<<"{\"maps\":">>, <<"[">>, Separated, <<"]}">>].
 
 
-fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
+
+% URL to navigate the RESTful state has to accomidate string types of Maps, Keys
+% and Values. But, quotes (%22) is a mess in URLs, so use * in the URL but use
+% the propper string when persisting/retrieving. 
+%
+% This pair of functions allows us to go from one (URL representation) to
+% another (JC representation).
+internal2url(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
     binary:replace(Term, <<"\"">>, <<"*">>, [global]);
-fix(Term) ->
+internal2url(Term) ->
     Term.
 
-
- 
-unfix(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
+uninternal2url(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
     binary:replace(Term, <<"*">>, <<"\"">>, [global]);
-unfix(Term) ->
+uninternal2url(Term) ->
     Term.

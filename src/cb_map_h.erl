@@ -25,12 +25,14 @@
          resource_exists/2
         ]).
 
--type jctype() :: 'miss' | true | false | null | string().
-
 % Callbacks that construct JSON responses to GET and does the actual put.
 -export([kv_to_json/2, put_kv/2]).
 
-% Handler state. When resource_exists = true, cache results in value.
+
+
+% Handler state. When resource_exists = true, cache results.
+-type jctype() :: 'miss' | true | false | null | string().
+
 -record(cb_map_state, {map        = miss  :: jctype(),
                        key        = miss  :: jctype(),
                        orig_value = miss  :: jctype(),
@@ -38,8 +40,6 @@
                        sequence   = false :: string() | 'miss', 
                        ttl        = 0     :: non_neg_integer()}).
 
-
--define(ENCODE(T), jsone:encode(T, [{float_format, [{decimals, 4}, compact]}])).
 
 %%% ============================================================================
 %%% Module callbacks required for Cowboy handler
@@ -49,9 +49,9 @@
 %% -----------------------------------------------------------------------------
 %% Initialize state 
 %%
--spec init(_,nonempty_maybe_improper_list())-> {'cowboy_rest', Req, State}
-                            when Req::cowboy_req:req(),
-                                 State::#cb_map_state{}.
+-spec init(_,nonempty_maybe_improper_list()) -> {'cowboy_rest', Req, State}
+                                                    when Req::cowboy_req:req(),
+                                                         State::#cb_map_state{}.
 
 init(Req, _Opts) ->
     State = #cb_map_state{},
@@ -67,9 +67,9 @@ init(Req, _Opts) ->
 %% -----------------------------------------------------------------------------
 %% 
 -spec allowed_methods (Req, State) -> {Method, Req, State}
-                                      when Req::cowboy_req:req(),
-                                           State::#cb_map_state{},
-                                           Method::nonempty_list().
+                                          when Req::cowboy_req:req(),
+                                               State::#cb_map_state{},
+                                               Method::nonempty_list().
 
 allowed_methods(Req, State) ->
     Methods = [<<"DELETE">>, <<"GET">>, <<"HEAD">>, <<"OPTIONS">>, <<"PUT">>], 
@@ -80,9 +80,9 @@ allowed_methods(Req, State) ->
 %% Only provide JSON for now.
 %%
 -spec content_types_provided(Req, State) -> {Types, Req, State}
-                                            when Req::cowboy_req:req(),
-                                                 State::#cb_map_state{},
-                                                 Types::cowboy:types().
+                                                when Req::cowboy_req:req(),
+                                                     State::#cb_map_state{},
+                                                     Types::cowboy:types().
 
 content_types_provided(Req, State) ->
    Types =  [
@@ -95,9 +95,9 @@ content_types_provided(Req, State) ->
 %% Only accept urlencode for now.
 %%
 -spec content_types_accepted(Req, State) -> {Types, Req, State}
-                                            when Req::cowboy_req:req(),
-                                                 State::#cb_map_state{},
-                                                 Types::cowboy:types().
+                                                when Req::cowboy_req:req(),
+                                                     State::#cb_map_state{},
+                                                     Types::cowboy:types().
 
 content_types_accepted(Req, State) ->
    Types =  [
@@ -110,12 +110,12 @@ content_types_accepted(Req, State) ->
 %% DELETE the KV resource collection.
 %%
 -spec delete_resource(Req, State) -> {Result, Req, State}
-                                     when Result::boolean(),
-                                          Req::cowboy_req:req(),
-                                          State::#cb_map_state{}.
+                                         when Result::boolean(),
+                                              Req::cowboy_req:req(),
+                                              State::#cb_map_state{}.
 
 delete_resource(Req, #cb_map_state{map=Map, key=Key} =State) ->
-    lager:debug("~p: DELETE(ing) ~p, ~p.", [Map, Key]),
+    lager:debug("~p: DELETE ~p, ~p.", [Map, Key]),
     try jc:evict(Map, Key) of
         ok -> {true, Req, State}
     catch
@@ -124,7 +124,7 @@ delete_resource(Req, #cb_map_state{map=Map, key=Key} =State) ->
             
 
 %% -----------------------------------------------------------------------------
-%% Return true if the resource exists, cache the value if the KV does exist.
+%% Return true if the resource exists, cache the results if the KV does exist.
 %% All actions hit this, so cache results for other REST verbs
 %%
 -spec resource_exists (Req, State) -> {boolean(), Req, State}
@@ -132,13 +132,13 @@ delete_resource(Req, #cb_map_state{map=Map, key=Key} =State) ->
                                            State::#cb_map_state{}.
 
 resource_exists(Req, State) ->
-    Map = put_fix(unfix(cowboy_req:binding(map, Req))),
-    Key = put_fix(unfix(cowboy_req:binding(key, Req))),
+    Map = ensure_valid(url2internal(cowboy_req:binding(map, Req))),
+    Key = ensure_valid(url2internal(cowboy_req:binding(key, Req))),
     {V, TTL, Seq, Req1} = get_values(Req),
 
     VFixed = case V of
                  miss -> miss;
-                 V -> put_fix(V)
+                 V -> ensure_valid(V)
              end,
                    
     Result = case jc:get(Map, Key) of
@@ -153,7 +153,7 @@ resource_exists(Req, State) ->
                                               sequence = Seq}}.
 
 
-% pull out the value, TTL, and sequence in a request.
+% pull out the Value, TTL, and sequence in a request.
 get_values(Req) ->
     {ok, Body, Req1} = cowboy_req:read_urlencoded_body(Req),
 
@@ -173,9 +173,9 @@ get_values(Req) ->
 %% Convert jc:get(map, key) to JSON (or empty if head).
 %%
 -spec kv_to_json(Req, State) ->{Value, Req, State}
-                                      when Value::nonempty_list(iodata()),
-                                           Req::cowboy_req:req(),
-                                           State::#cb_map_state{}.
+                                   when Value::nonempty_list(iodata()),
+                                        Req::cowboy_req:req(),
+                                        State::#cb_map_state{}.
 
 kv_to_json(Req, #cb_map_state{map=Map, key=Key, orig_value = Value} = State) -> 
     lager:debug("~p: GET ~p:~p.",[?MODULE, Map, Key]),
@@ -188,18 +188,23 @@ kv_to_json(Req, #cb_map_state{map=Map, key=Key, orig_value = Value} = State) ->
 %% Use TTL if ttl=xx is supplied, use jc_s if sequence=XX is supplied.
 %%
 -spec put_kv(Req, State) ->{true, Req, State}
-                                      when Req::cowboy_req:req(),
-                                           State::#cb_map_state{}.
+                               when Req::cowboy_req:req(),
+                                    State::#cb_map_state{}.
+
 put_kv(Req, #cb_map_state{sequence=S}=State) ->
     case S of
         false -> put_kv_jc(Req, State);
         _Sequence -> put_kv_jc_s(Req, State)
     end.
     
-put_kv_jc_s(Req, #cb_map_state{map=Map, key=Key, new_value=V, sequence=S, ttl = T}=State) ->
+put_kv_jc_s(Req, #cb_map_state{map=Map, 
+                               key=Key, 
+                               new_value=V, 
+                               sequence=S, 
+                               ttl = T}=State) ->
     {SHP, Path} = get_URI(Req),
 
-    lager:debug("~p: jc_s:put(~p, ~p, ~p, ~p, ~p).",[?MODULE, Map, Key, V, T, S]),
+    lager:debug("~p: jc_s:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, T, S]),
     try jc_s:put(Map, Key, V, T, S) of
         {ok, Key} ->
             Req1 = cowboy_req:set_resp_header(<<"location">>, [SHP, Path], Req),
@@ -213,7 +218,7 @@ put_kv_jc_s(Req, #cb_map_state{map=Map, key=Key, new_value=V, sequence=S, ttl = 
     end.
 
 put_kv_jc(Req, #cb_map_state{map=Map, key=Key, new_value = V, ttl = T}=State) ->
-    lager:debug("~p: jc:put(~p, ~p, ~p, ~p).",[?MODULE, Map, Key, V, T]),
+    lager:debug("~p: jc:put(~p, ~p, ~p).",[?MODULE, Map, Key, T]),
 
 
     try jc:put(Map, Key, V, T) of
@@ -230,10 +235,10 @@ put_kv_jc(Req, #cb_map_state{map=Map, key=Key, new_value = V, ttl = T}=State) ->
 
 
 % Ensure that we have either True, False, Null, Number or String
-put_fix(<<"true">>) -> <<"true">>;
-put_fix(<<"false">>) ->  <<"false">>;
-put_fix(<<"null">>) -> <<"null">>;
-put_fix(BString) ->
+ensure_valid(<<"true">>) -> <<"true">>;
+ensure_valid(<<"false">>) ->  <<"false">>;
+ensure_valid(<<"null">>) -> <<"null">>;
+ensure_valid(BString) ->
     try binary_to_integer(BString) of
         _ -> BString
     catch
@@ -272,7 +277,7 @@ kv_to_json(Req, Map, Key, Value) ->
      <<"\"key\":">>, Key, <<",">>,
      <<"\"value\":">>, Value, <<",">>,
      <<"\"links\": [{\"rel\":\"self\",\"href\":\"">>,Url,<<"\"},">>,
-     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, fix(Map),
+     <<"{\"rel\":\"parent\",\"href\":\"">>,SHP, <<"/maps/">>, internal2url(Map),
      <<"\"}]}">>].
 
 
@@ -297,13 +302,18 @@ value_to_int(Key, Default, Body) ->
     end.
 
                     
-
-fix(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
+% URL to navigate the RESTful state has to accomidate string types of Maps, Keys
+% and Values. But, quotes (%22) is a mess in URLs, so use * in the URL but use
+% the propper string when persisting/retrieving. 
+%
+% This pair of functions allows us to go from one (URL representation) to
+% another (JC representation).
+internal2url(<<First:1/binary,_/binary>> = Term) when First == <<"\"">> ->
     binary:replace(Term, <<"\"">>, <<"*">>, [global]);
-fix(Term) ->
+internal2url(Term) ->
     Term.
 
-unfix(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
+url2internal(<<First:1/binary,_/binary>> = Term) when First == <<"*">> ->
     binary:replace(Term, <<"*">>, <<"\"">>, [global]);
-unfix(Term) ->
+url2internal(Term) ->
     Term.
