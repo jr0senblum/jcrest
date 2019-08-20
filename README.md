@@ -1,6 +1,7 @@
 # jcrest
 Restful interface for JC
 
+### Introduction
 * Restfull Interface
   * Maps, Keys, and Values can be in binary representation of Integers, true, false, null, or strings
   * Provided: application/json, Accepted: application/x-www-form-urlencoded
@@ -13,10 +14,11 @@ Restful interface for JC
     * http://127.0.0.1:8080/maps/someMap/search/widget.text.hOffset=250
     * urlencoded type accepted with PUT parameters of value and (optionally) ttl an sequence  
 
-## Configuration
+### Configuration
 * rebar.config pulls in JC via dependency
-* ip, port, and root defined in sysconfig in jcrest stanza
-   '''javascript
+* ip, port, and root defined in sysconfig in jcrest stanza  
+
+   ```javascript
 {server_ip, "127.0.0.1"},
 {server_port, 8080},
 {server_root, "/"}
