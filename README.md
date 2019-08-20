@@ -11,8 +11,19 @@ Restful interface for JC
     * http://127.0.0.1:8080/maps/someMap
     * http://127.0.0.1:8080/maps/someMap/someKey
     * http://127.0.0.1:8080/maps/someMap/search/widget.text.hOffset=250
-    * urlencoded type accepted with PUT parameters of value and (optionally) ttl an sequence
-  
+    * urlencoded type accepted with PUT parameters of value and (optionally) ttl an sequence  
+
+## Configuration
+* rebar.config pulls in JC via dependency
+* ip, port, and root defined in sysconfig in jcrest stanza
+   '''javascript
+{server_ip, "127.0.0.1"},
+{server_port, 8080},
+{server_root, "/"}
+```
+
+
+
 `curl -X PUT -d 'value=200&ttl=100&sequence=10' http://127.0.0.1:8080/maps/unit/3A`  produces  
 
 ```javascript
