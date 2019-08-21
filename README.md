@@ -27,6 +27,17 @@ Restful interface for JC
 }
 ```
 
+### Examples
+`curl -i -X OPTIONS http://127.0.0.1:8080/maps`
+```javascript
+HTTP/1.1 200 OK
+allow: DELETE, GET, HEAD, OPTIONS
+content-length: 0
+date: Wed, 21 Aug 2019 13:53:37 GMT
+server: Cowboy
+```
+
+
 `curl -X PUT -d 'value=200&ttl=100&sequence=10' http://127.0.0.1:8080/maps/unit/3A`  produces   
 
 ```javascript
