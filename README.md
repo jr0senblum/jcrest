@@ -2,31 +2,32 @@
 Restful interface for JC
 
 ### Introduction
-* Restfull Interface
-  * Maps, Keys, and Values can be in binary representation of Integers, true, false, null, or strings
-  * Provided: application/json, Accepted: application/x-www-form-urlencoded
-  * DELETE, GET, HEAD, and OPTIONS verb support for Maps
+* Restfull Interface of JC
+  * Provided: application/json, Accepted: application/x-www-form-urlencoded  
+  * PUT parameters of value and (optionally) ttl and sequence    
+  * DELETE, GET, HEAD, and OPTIONS verb support for Maps  
   * DELETE, GET, HEAD, OPTIONS, and PUT are supported verbs for cache entries 
-    (Map, Key, Values).
-    * http://127.0.0.1:8080/maps
-    * http://127.0.0.1:8080/maps/someMap
-    * http://127.0.0.1:8080/maps/someMap/someKey
-    * http://127.0.0.1:8080/maps/someMap/search/widget.text.hOffset=250
-    * urlencoded type accepted with PUT parameters of value and (optionally) ttl an sequence  
+    (Map, Key, Values).  
+    * http://127.0.0.1:8080/maps  
+    * http://127.0.0.1:8080/maps/someMap  
+    * http://127.0.0.1:8080/maps/someMap/someKey  
+    * http://127.0.0.1:8080/maps/someMap/search/widget.text.hOffset=250  
 
-### Configuration
-* rebar.config pulls in JC via dependency
-* ip, port, and root defined in sysconfig in jcrest stanza  
+### Configuration  
+* rebar.config pulls in JC via dependency  
+* ip, port, and root defined in sysconfig in jcrest stanza 
 
    ```javascript
-{server_ip, "127.0.0.1"},
-{server_port, 8080},
-{server_root, "/"}
+ {jcrest,
+  [       
+   {server_ip, "127.0.0.1"},
+   {server_port, 8080},
+   {server_root, "/"}
+  ]
+}
 ```
 
-
-
-`curl -X PUT -d 'value=200&ttl=100&sequence=10' http://127.0.0.1:8080/maps/unit/3A`  produces  
+`curl -X PUT -d 'value=200&ttl=100&sequence=10' http://127.0.0.1:8080/maps/unit/3A`  produces   
 
 ```javascript
 http://127.0.0.1:8080/maps/  
