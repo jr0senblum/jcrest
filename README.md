@@ -1,9 +1,13 @@
 # jcrest
 Restful interface for JC
 
+
+[![Build Status](https://travis-ci.org/jr0senblum/jcrest.svg?branch=master)](https://travis-ci.org/jr0senblum/jcrest)
+
 ### Introduction
-* Restfull Interface of JC
-  * Provided: application/json, Accepted: application/x-www-form-urlencoded  
+* Restfull Interface for the  JC cache
+  * Provided: application/json  
+  * Accepted: application/x-www-form-urlencoded  
   * PUT parameters of value and (optionally) ttl and sequence    
   * DELETE, GET, HEAD, and OPTIONS verb support for Maps  
   * DELETE, GET, HEAD, OPTIONS, and PUT are supported verbs for cache entries 
@@ -26,6 +30,17 @@ Restful interface for JC
   ]
 }
 ```
+
+
+#### compile  
+$ make compile
+
+#### run tests  
+$ make eunit
+
+#### dialyze  
+$ make dialyze
+
 
 ### Examples  
 
@@ -57,6 +72,7 @@ http://127.0.0.1:8080/maps/
         }
        ]
 }
+
 
 http://127.0.0.1:8080/maps/*unit*  
 {

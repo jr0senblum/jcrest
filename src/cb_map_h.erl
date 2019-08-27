@@ -31,13 +31,13 @@
 
 
 % Handler state. When resource_exists = true, cache results.
--type jctype() :: 'miss' | true | false | null | string().
+-type jctype() :: 'miss' | true | false | null |  binary().
 
 -record(cb_map_state, {map        = miss  :: jctype(),
                        key        = miss  :: jctype(),
                        orig_value = miss  :: jctype(),
                        new_value  = miss  :: string() | 'miss', 
-                       sequence   = false :: string() | 'miss', 
+                       sequence   = false :: non_neg_integer() | false, 
                        ttl        = 0     :: non_neg_integer()}).
 
 

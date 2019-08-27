@@ -9,7 +9,7 @@ rel/example_project
 .concrete/DEV_MODE
 .rebar
 
-
+doc/*
 _build/*
 *.lock
 

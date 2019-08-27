@@ -1,0 +1,16 @@
+
+language: erlang
+otp_release:
+   - 20.0
+   - 21.0
+   - 22.0
+
+
+
+script:
+  - rebar3 compile
+  - rebar3 eunit
+  - rebar3 edoc
+
+
+
