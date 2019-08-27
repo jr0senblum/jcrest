@@ -17,18 +17,20 @@ Restful interface for JC
 * rebar.config pulls in JC via dependency  
 * ip, port, and root defined in sysconfig in jcrest stanza 
 
-   ```javascript
+```javascript
  {jcrest,
   [       
-   {server_ip, "127.0.0.1"},
-   {server_port, 8080},
-   {server_root, "/"}
+          {server_ip, "127.0.0.1"},
+          {server_port, 8080},
+          {server_root, "/"}
   ]
 }
 ```
 
-### Examples
-`curl -i -X OPTIONS http://127.0.0.1:8080/maps`
+### Examples  
+
+`curl -i -X OPTIONS http://127.0.0.1:8080/maps`  
+
 ```javascript
 HTTP/1.1 200 OK
 allow: DELETE, GET, HEAD, OPTIONS
